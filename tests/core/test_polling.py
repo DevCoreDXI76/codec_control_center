@@ -177,3 +177,49 @@ async def test_on_status_callback_invoked(registry):
     await scheduler.poll_once("dev-1")
     assert len(received) == 1
     assert received[0][0] == "dev-1"
+
+
+async def test_add_device_while_running_spawns_polling_task(registry):
+    scheduler = PollingScheduler(driver_factory=registry.factory, base_interval=0.05)
+    await scheduler.start()
+    try:
+        scheduler.add_device("dev-late")
+        await asyncio.sleep(0.12)
+        assert registry.created["dev-late"].connect_calls >= 1
+    finally:
+        await scheduler.stop()
+
+
+async def test_get_driver_reuses_same_session(registry):
+    scheduler = PollingScheduler(driver_factory=registry.factory, base_interval=15.0)
+    scheduler.add_device("dev-1")
+    driver1 = await scheduler.get_driver("dev-1")
+    driver2 = await scheduler.get_driver("dev-1")
+    assert driver1 is driver2
+    assert registry.created["dev-1"].connect_calls == 1
+
+
+async def test_get_driver_unknown_device_raises_keyerror(registry):
+    scheduler = PollingScheduler(driver_factory=registry.factory)
+    with pytest.raises(KeyError):
+        await scheduler.get_driver("no-such-device")
+
+
+async def test_reset_device_disconnects_and_clears_session(registry):
+    scheduler = PollingScheduler(driver_factory=registry.factory, base_interval=15.0)
+    scheduler.add_device("dev-1")
+    driver1 = await scheduler.get_driver("dev-1")
+
+    await scheduler.reset_device("dev-1")
+    assert driver1.disconnect_calls == 1
+
+    driver2 = await scheduler.get_driver("dev-1")
+    assert driver2 is not driver1
+    assert driver2.connect_calls == 1
+
+
+async def test_reset_device_unknown_or_no_session_is_noop(registry):
+    scheduler = PollingScheduler(driver_factory=registry.factory)
+    await scheduler.reset_device("no-such-device")  # 예외 없이 무시
+    scheduler.add_device("dev-1")
+    await scheduler.reset_device("dev-1")  # 아직 연결 안 된 상태도 무시

@@ -54,7 +54,10 @@ class PollingScheduler:
         self._running = False
 
     def add_device(self, device_id: str, interval: float | None = None) -> None:
-        self._runtimes[device_id] = _DeviceRuntime(interval=interval or self.base_interval)
+        runtime = _DeviceRuntime(interval=interval or self.base_interval)
+        self._runtimes[device_id] = runtime
+        if self._running:
+            runtime.task = asyncio.create_task(self._poll_loop(device_id))
 
     def remove_device(self, device_id: str) -> None:
         runtime = self._runtimes.pop(device_id, None)
@@ -64,6 +67,28 @@ class PollingScheduler:
     def get_status(self, device_id: str) -> DeviceStatus | None:
         runtime = self._runtimes.get(device_id)
         return runtime.last_status if runtime else None
+
+    async def reset_device(self, device_id: str) -> None:
+        """장비 접속 정보/자격증명이 바뀌었을 때 기존 세션을 끊어 다음 폴링에서 재연결하게 한다."""
+        runtime = self._runtimes.get(device_id)
+        if runtime is None or runtime.driver is None:
+            return
+        try:
+            await runtime.driver.disconnect()
+        except DriverError:
+            pass
+        runtime.driver = None
+
+    async def get_driver(self, device_id: str) -> DeviceDriver:
+        """제어 API 등에서 폴링과 동일한(재사용되는) 드라이버 세션을 얻는다."""
+        runtime = self._runtimes.get(device_id)
+        if runtime is None:
+            raise KeyError(f"unknown device id: {device_id}")
+        async with self._semaphore:
+            if runtime.driver is None:
+                runtime.driver = self._driver_factory(device_id)
+                await runtime.driver.connect()
+        return runtime.driver
 
     async def start(self) -> None:
         self._running = True
