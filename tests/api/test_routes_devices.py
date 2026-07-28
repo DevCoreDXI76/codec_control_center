@@ -1,6 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.driver_factory import build_driver_factory
+from app.core.polling import PollingScheduler
 from app.core.registry import DeviceRegistry
 from app.core.vault import CredentialVault
 from app.main import app
@@ -10,6 +12,9 @@ from app.main import app
 def client(tmp_path):
     app.state.registry = DeviceRegistry(tmp_path / "devices.enc.json")
     app.state.vault = CredentialVault(tmp_path / "credentials.enc.json")
+    app.state.scheduler = PollingScheduler(
+        driver_factory=build_driver_factory(app.state.registry, app.state.vault)
+    )
     return TestClient(app)
 
 

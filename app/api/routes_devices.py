@@ -7,6 +7,7 @@ import json
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from app.core.polling import PollingScheduler
 from app.core.registry import DeviceRegistry
 from app.core.vault import CredentialVault
 from app.models.device import Device
@@ -70,6 +71,10 @@ def _get_vault(request: Request) -> CredentialVault:
     return request.app.state.vault
 
 
+def _get_scheduler(request: Request) -> PollingScheduler:
+    return request.app.state.scheduler
+
+
 @router.get("", response_model=list[DeviceResponse])
 async def list_devices(request: Request) -> list[DeviceResponse]:
     registry = _get_registry(request)
@@ -103,6 +108,7 @@ async def create_device(payload: DeviceCreateRequest, request: Request) -> Devic
     except ValueError as exc:
         vault.delete(credential_ref)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    _get_scheduler(request).add_device(device.id)
     return _to_response(device)
 
 
@@ -130,6 +136,8 @@ async def update_device(device_id: str, payload: DeviceUpdateRequest, request: R
 
     if "credential_ref" in changes:
         vault.delete(old_credential_ref)
+    # 접속 정보/자격증명이 바뀌었을 수 있으므로 기존 세션을 끊어 다음 요청에서 재연결하게 한다.
+    await _get_scheduler(request).reset_device(device_id)
     return _to_response(device)
 
 
@@ -142,3 +150,4 @@ async def delete_device(device_id: str, request: Request) -> None:
         raise HTTPException(status_code=404, detail="device not found")
     registry.delete_device(device_id)
     vault.delete(device.credential_ref)
+    _get_scheduler(request).remove_device(device_id)

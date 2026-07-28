@@ -59,6 +59,7 @@ class PolySimServer:
         self._server = await telnetlib3.create_server(
             host=self.host, port=self.port, shell=self._shell, encoding="utf8"
         )
+        self.port = self._server.sockets[0].getsockname()[1]
 
     async def stop(self) -> None:
         if self._server is not None:
