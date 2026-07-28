@@ -14,7 +14,7 @@ import json
 import uuid
 from pathlib import Path
 
-import win32crypt
+from app.core import dpapi
 
 _ENTROPY = b"codec-control-center"
 
@@ -28,9 +28,7 @@ class CredentialVault:
 
     def store(self, plaintext: str) -> str:
         """평문을 DPAPI로 암호화해 저장하고, 조회에 쓸 credential_ref를 반환한다."""
-        encrypted = win32crypt.CryptProtectData(
-            plaintext.encode("utf-8"), None, _ENTROPY, None, None, 0
-        )
+        encrypted = dpapi.protect(plaintext.encode("utf-8"), _ENTROPY)
         credential_ref = str(uuid.uuid4())
         data = self._read_store()
         data[credential_ref] = base64.b64encode(encrypted).decode("ascii")
@@ -43,8 +41,7 @@ class CredentialVault:
         if credential_ref not in data:
             raise KeyError(f"unknown credential_ref: {credential_ref}")
         encrypted = base64.b64decode(data[credential_ref])
-        _description, decrypted = win32crypt.CryptUnprotectData(encrypted, _ENTROPY, None, None, 0)
-        return decrypted.decode("utf-8")
+        return dpapi.unprotect(encrypted, _ENTROPY).decode("utf-8")
 
     def delete(self, credential_ref: str) -> None:
         data = self._read_store()
