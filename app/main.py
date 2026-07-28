@@ -9,6 +9,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.api.routes_devices import router as devices_router
+from app.api.ws_status import StatusBroadcaster
+from app.api.ws_status import router as ws_status_router
 from app.core.registry import DeviceRegistry
 from app.core.vault import CredentialVault
 
@@ -23,8 +25,10 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 app.state.registry = DeviceRegistry(DATA_DIR / "devices.enc.json")
 app.state.vault = CredentialVault(DATA_DIR / "credentials.enc.json")
+app.state.broadcaster = StatusBroadcaster()
 
 app.include_router(devices_router)
+app.include_router(ws_status_router)
 
 
 @app.get("/api/health")
