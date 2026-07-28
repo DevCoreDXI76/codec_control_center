@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -28,7 +28,7 @@ DATA_DIR = APP_DIR.parent / "data"
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     for device in app.state.registry.list_devices():
-        app.state.scheduler.add_device(device.id)
+        await app.state.scheduler.add_device(device.id)
     await app.state.scheduler.start()
     yield
     await app.state.scheduler.stop()
@@ -54,3 +54,14 @@ app.include_router(ws_status_router)
 @app.get("/api/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/")
+async def dashboard(request: Request):
+    registry = request.app.state.registry
+    scheduler = request.app.state.scheduler
+    devices = [
+        {"device": device, "status": scheduler.get_status(device.id)}
+        for device in registry.list_devices()
+    ]
+    return templates.TemplateResponse(request, "index.html", {"devices": devices})

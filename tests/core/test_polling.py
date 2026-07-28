@@ -82,7 +82,7 @@ def registry():
 
 async def test_poll_once_returns_online_status(registry):
     scheduler = PollingScheduler(driver_factory=registry.factory, base_interval=15.0)
-    scheduler.add_device("dev-1")
+    await scheduler.add_device("dev-1")
     status = await scheduler.poll_once("dev-1")
     assert status.online is True
     assert scheduler.get_status("dev-1") is status
@@ -96,7 +96,7 @@ async def test_poll_once_unknown_device_raises_keyerror(registry):
 
 async def test_session_reused_across_polls(registry):
     scheduler = PollingScheduler(driver_factory=registry.factory, base_interval=15.0)
-    scheduler.add_device("dev-1")
+    await scheduler.add_device("dev-1")
     await scheduler.poll_once("dev-1")
     await scheduler.poll_once("dev-1")
     assert registry.created["dev-1"].connect_calls == 1  # 재접속하지 않고 세션 재사용
@@ -105,7 +105,7 @@ async def test_session_reused_across_polls(registry):
 async def test_connect_failure_marks_offline_and_backs_off(registry):
     registry.connect_should_fail["dev-1"] = True
     scheduler = PollingScheduler(driver_factory=registry.factory, base_interval=10.0, max_interval=100.0)
-    scheduler.add_device("dev-1", interval=10.0)
+    await scheduler.add_device("dev-1", interval=10.0)
 
     status1 = await scheduler.poll_once("dev-1")
     assert status1.online is False
@@ -122,7 +122,7 @@ async def test_connect_failure_marks_offline_and_backs_off(registry):
 async def test_backoff_capped_at_max_interval(registry):
     registry.connect_should_fail["dev-1"] = True
     scheduler = PollingScheduler(driver_factory=registry.factory, base_interval=10.0, max_interval=25.0)
-    scheduler.add_device("dev-1", interval=10.0)
+    await scheduler.add_device("dev-1", interval=10.0)
 
     for _ in range(5):
         await scheduler.poll_once("dev-1")
@@ -133,7 +133,7 @@ async def test_backoff_capped_at_max_interval(registry):
 async def test_recovery_resets_interval_and_failure_count(registry):
     registry.connect_should_fail["dev-1"] = True
     scheduler = PollingScheduler(driver_factory=registry.factory, base_interval=10.0, max_interval=100.0)
-    scheduler.add_device("dev-1", interval=10.0)
+    await scheduler.add_device("dev-1", interval=10.0)
 
     await scheduler.poll_once("dev-1")
     await scheduler.poll_once("dev-1")
@@ -150,7 +150,7 @@ async def test_semaphore_limits_concurrency(registry):
     scheduler = PollingScheduler(driver_factory=registry.factory, base_interval=15.0, max_concurrency=2)
     device_ids = [f"dev-{i}" for i in range(6)]
     for device_id in device_ids:
-        scheduler.add_device(device_id)
+        await scheduler.add_device(device_id)
 
     await asyncio.gather(*(scheduler.poll_once(device_id) for device_id in device_ids))
     assert registry.max_concurrent <= 2
@@ -158,7 +158,7 @@ async def test_semaphore_limits_concurrency(registry):
 
 async def test_start_and_stop_lifecycle_disconnects_drivers(registry):
     scheduler = PollingScheduler(driver_factory=registry.factory, base_interval=0.05)
-    scheduler.add_device("dev-1")
+    await scheduler.add_device("dev-1")
     await scheduler.start()
     await asyncio.sleep(0.12)  # 최소 1회 이상 폴링되도록 대기
     await scheduler.stop()
@@ -173,7 +173,7 @@ async def test_on_status_callback_invoked(registry):
     scheduler = PollingScheduler(
         driver_factory=registry.factory, base_interval=15.0, on_status=lambda did, s: received.append((did, s))
     )
-    scheduler.add_device("dev-1")
+    await scheduler.add_device("dev-1")
     await scheduler.poll_once("dev-1")
     assert len(received) == 1
     assert received[0][0] == "dev-1"
@@ -183,7 +183,7 @@ async def test_add_device_while_running_spawns_polling_task(registry):
     scheduler = PollingScheduler(driver_factory=registry.factory, base_interval=0.05)
     await scheduler.start()
     try:
-        scheduler.add_device("dev-late")
+        await scheduler.add_device("dev-late")
         await asyncio.sleep(0.12)
         assert registry.created["dev-late"].connect_calls >= 1
     finally:
@@ -192,7 +192,7 @@ async def test_add_device_while_running_spawns_polling_task(registry):
 
 async def test_get_driver_reuses_same_session(registry):
     scheduler = PollingScheduler(driver_factory=registry.factory, base_interval=15.0)
-    scheduler.add_device("dev-1")
+    await scheduler.add_device("dev-1")
     driver1 = await scheduler.get_driver("dev-1")
     driver2 = await scheduler.get_driver("dev-1")
     assert driver1 is driver2
@@ -207,7 +207,7 @@ async def test_get_driver_unknown_device_raises_keyerror(registry):
 
 async def test_reset_device_disconnects_and_clears_session(registry):
     scheduler = PollingScheduler(driver_factory=registry.factory, base_interval=15.0)
-    scheduler.add_device("dev-1")
+    await scheduler.add_device("dev-1")
     driver1 = await scheduler.get_driver("dev-1")
 
     await scheduler.reset_device("dev-1")
@@ -221,5 +221,5 @@ async def test_reset_device_disconnects_and_clears_session(registry):
 async def test_reset_device_unknown_or_no_session_is_noop(registry):
     scheduler = PollingScheduler(driver_factory=registry.factory)
     await scheduler.reset_device("no-such-device")  # 예외 없이 무시
-    scheduler.add_device("dev-1")
+    await scheduler.add_device("dev-1")
     await scheduler.reset_device("dev-1")  # 아직 연결 안 된 상태도 무시

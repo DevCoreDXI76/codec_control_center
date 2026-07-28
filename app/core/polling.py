@@ -53,11 +53,21 @@ class PollingScheduler:
         self._runtimes: dict[str, _DeviceRuntime] = {}
         self._running = False
 
-    def add_device(self, device_id: str, interval: float | None = None) -> None:
+    async def add_device(self, device_id: str, interval: float | None = None) -> DeviceStatus | None:
+        """장비를 스케줄러에 등록한다.
+
+        이미 폴링 중(running)이면 등록과 동시에 1회 즉시 폴링을 수행해 반환한다.
+        (그래야 장비 등록 API 응답 시점에 최신 상태를 바로 알 수 있다 — 등록 직후
+        화면이 몇 초간 "오프라인/미확인"으로 보이는 문제를 막는다.)
+        """
         runtime = _DeviceRuntime(interval=interval or self.base_interval)
         self._runtimes[device_id] = runtime
-        if self._running:
-            runtime.task = asyncio.create_task(self._poll_loop(device_id))
+        if not self._running:
+            return None
+        async with self._semaphore:
+            status = await self._poll_device(device_id, runtime)
+        runtime.task = asyncio.create_task(self._poll_loop(device_id, skip_first_poll=True))
+        return status
 
     def remove_device(self, device_id: str) -> None:
         runtime = self._runtimes.pop(device_id, None)
@@ -123,11 +133,14 @@ class PollingScheduler:
         async with self._semaphore:
             return await self._poll_device(device_id, runtime)
 
-    async def _poll_loop(self, device_id: str) -> None:
+    async def _poll_loop(self, device_id: str, skip_first_poll: bool = False) -> None:
         runtime = self._runtimes[device_id]
+        first = True
         while self._running:
-            async with self._semaphore:
-                await self._poll_device(device_id, runtime)
+            if not (first and skip_first_poll):
+                async with self._semaphore:
+                    await self._poll_device(device_id, runtime)
+            first = False
             await asyncio.sleep(runtime.interval)
 
     async def _poll_device(self, device_id: str, runtime: _DeviceRuntime) -> DeviceStatus:

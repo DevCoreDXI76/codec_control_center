@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import pytest
@@ -46,7 +47,7 @@ def _register_cisco_device(cisco_sim) -> str:
         credential_ref=credential_ref,
         is_simulated=True,
     )
-    app.state.scheduler.add_device(device.id)
+    asyncio.run(app.state.scheduler.add_device(device.id))
     return device.id
 
 

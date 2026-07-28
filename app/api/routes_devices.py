@@ -108,7 +108,7 @@ async def create_device(payload: DeviceCreateRequest, request: Request) -> Devic
     except ValueError as exc:
         vault.delete(credential_ref)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    _get_scheduler(request).add_device(device.id)
+    await _get_scheduler(request).add_device(device.id)
     return _to_response(device)
 
 
