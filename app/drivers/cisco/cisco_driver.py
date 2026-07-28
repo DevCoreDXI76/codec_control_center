@@ -78,10 +78,17 @@ class CiscoDriver(DeviceDriver):
         await asyncio.to_thread(self._disconnect_sync)
 
     def _disconnect_sync(self) -> None:
+        # 연결이 이미 끊어진/불안정한 상태에서도 정리(cleanup)는 항상 조용히 끝나야 한다.
         if self._channel is not None:
-            self._channel.close()
+            try:
+                self._channel.close()
+            except (paramiko.SSHException, OSError, EOFError):
+                pass
         if self._client is not None:
-            self._client.close()
+            try:
+                self._client.close()
+            except (paramiko.SSHException, OSError, EOFError):
+                pass
         self._channel = None
         self._client = None
 
