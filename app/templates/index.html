@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Codec Control Center</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <script defer src="/static/vendor/alpine.min.js"></script>
+  <script src="/static/js/dashboard.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1>● Codec Control Center</h1>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar">
+      <a class="active" href="/">대시보드</a>
+      <a href="#">장비관리</a>
+      <a href="#">Teams</a>
+      <a href="#">설정</a>
+    </nav>
+
+    <main class="main">
+      <div class="stat-bar">
+        <span>전체 <strong data-stat="total">{{ devices|length }}</strong></span>
+        <span>온라인 <strong data-stat="online">{{ devices|selectattr('status')|selectattr('status.online')|list|length }}</strong></span>
+        <span>오프라인 <strong data-stat="offline">{{ devices|rejectattr('status')|list|length + devices|selectattr('status')|rejectattr('status.online')|list|length }}</strong></span>
+        <span>통화중 <strong data-stat="call">{{ devices|selectattr('status')|selectattr('status.in_call')|list|length }}</strong></span>
+      </div>
+
+      <div class="toolbar" x-data="deviceForm()">
+        <div></div>
+        <button class="btn btn-primary" type="button" @click="open = true">+ 장비 등록</button>
+
+        <div class="modal-backdrop" x-show="open" x-cloak @keydown.escape.window="open = false">
+          <div class="modal" @click.outside="open = false">
+            <h2>장비 등록</h2>
+            <form @submit.prevent="submit()">
+              <div class="field">
+                <label>이름</label>
+                <input type="text" x-model="name" required />
+              </div>
+              <div class="field">
+                <label>제조사</label>
+                <select x-model="vendor">
+                  <option value="poly">Poly</option>
+                  <option value="cisco">Cisco</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>접속방식</label>
+                <select x-model="connection_type">
+                  <option value="telnet">Telnet</option>
+                  <option value="ssh">SSH</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>IP/Host</label>
+                <input type="text" x-model="host" required />
+              </div>
+              <div class="field">
+                <label>Port</label>
+                <input type="number" x-model="port" required />
+              </div>
+              <div class="field">
+                <label>그룹(태그)</label>
+                <input type="text" x-model="group" />
+              </div>
+              <div class="field">
+                <label>계정 ID</label>
+                <input type="text" x-model="username" />
+              </div>
+              <div class="field">
+                <label>계정 PW</label>
+                <input type="password" x-model="password" />
+              </div>
+              <div class="field">
+                <label><input type="checkbox" x-model="is_simulated" /> 시뮬레이터 장비로 등록</label>
+              </div>
+              <p class="error-text" x-show="error" x-text="error"></p>
+              <div class="modal-actions">
+                <button class="btn" type="button" @click="open = false">취소</button>
+                <button class="btn btn-primary" type="submit" :disabled="saving">저장</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      {% if devices %}
+      <div class="card-grid">
+        {% for item in devices %}
+        {% set d = item.device %}
+        {% set s = item.status %}
+        <div
+          class="device-card {% if s %}{% if not s.online %}status-offline{% elif s.in_call %}status-call{% else %}status-online{% endif %}{% else %}status-offline{% endif %} {% if d.is_simulated %}status-sim{% endif %}"
+          data-device-id="{{ d.id }}"
+          data-online="{{ '1' if s and s.online else '0' }}"
+          data-in-call="{{ '1' if s and s.in_call else '0' }}"
+        >
+          <div class="card-head">
+            <h3>{{ d.name }}{% if d.is_simulated %}<span class="badge">SIM</span>{% endif %}</h3>
+          </div>
+          <div class="meta">{{ d.vendor }} · {{ d.connection_type }} · {{ d.host }}:{{ d.port }} · {{ d.group }}</div>
+          <div class="status-line">
+            <span class="status-dot"></span>
+            <span data-field="status-text">
+              {% if not s %}미확인{% elif not s.online %}오프라인{% elif s.in_call %}통화중{% else %}온라인{% endif %}
+            </span>
+          </div>
+          <div class="meta" data-field="mute-text">{{ '음소거됨' if s and s.muted else '음소거 안됨' }}</div>
+          <div class="meta" data-field="last-updated">{{ s.last_polled_at if s else '아직 폴링 안됨' }}</div>
+          <p class="error-text" data-field="error-text" style="{{ '' if s and s.error else 'display:none' }}">{{ s.error if s and s.error else '' }}</p>
+
+          <div class="card-actions">
+            <button
+              class="btn"
+              data-field="mute-btn"
+              data-muted="{{ '1' if s and s.muted else '0' }}"
+              onclick="toggleMute('{{ d.id }}', this)"
+            >
+              {{ '🎤 Unmute' if s and s.muted else '🔇 Mute' }}
+            </button>
+            <button class="btn" onclick="hangupCall('{{ d.id }}', this)">☎ 종료</button>
+            <button class="btn" onclick="refreshStatus('{{ d.id }}')">⟳ 새로고침</button>
+            <button class="btn btn-danger" onclick="rebootDevice('{{ d.id }}', '{{ d.name }}', this)">재부팅</button>
+            <button class="btn" onclick="deleteDevice('{{ d.id }}', '{{ d.name }}', this)">삭제</button>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <p>등록된 장비가 없습니다.</p>
+        <p>먼저 장비를 등록하거나 시뮬레이터 장비로 체험해보세요.</p>
+      </div>
+      {% endif %}
+    </main>
+  </div>
+</body>
+</html>
