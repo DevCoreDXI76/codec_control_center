@@ -8,3 +8,5 @@ data/*.sqlite3
 *.egg-info/
 .env
 .notion/
+build/
+dist/

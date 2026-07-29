@@ -2,6 +2,7 @@
 """FastAPI 진입점 (SPEC.md 1절/2절). 로컬 웹 대시보드 서버."""
 from __future__ import annotations
 
+import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -24,10 +25,28 @@ from app.core.registry import DeviceRegistry
 from app.core.settings import SettingsStore
 from app.core.vault import CredentialVault
 
-APP_DIR = Path(__file__).resolve().parent
-TEMPLATES_DIR = APP_DIR / "templates"
-STATIC_DIR = APP_DIR / "static"
-DATA_DIR = APP_DIR.parent / "data"
+
+def _resolve_paths() -> tuple[Path, Path, Path, Path]:
+    """(app_dir, templates_dir, static_dir, data_dir)를 반환한다.
+
+    PyInstaller onefile EXE(frozen)에서는 번들 리소스(templates/static)는
+    sys._MEIPASS(실행 시 임시 압축해제 경로)에서 읽고, 사용자 데이터(data/)는
+    실행 파일이 실제로 위치한 폴더에 만든다 — _MEIPASS는 프로세스 종료 시
+    삭제되므로 거기에 데이터를 쓰면 재실행 때마다 레지스트리가 사라진다
+    (SPEC.md 11절: "설치 폴더의 data/는 삭제하지 말 것" 전제와 일치시키기 위함).
+    """
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        base_dir = Path(sys._MEIPASS)
+        exe_dir = Path(sys.executable).resolve().parent
+    else:
+        base_dir = Path(__file__).resolve().parent.parent
+        exe_dir = base_dir
+
+    app_dir = base_dir / "app"
+    return app_dir, app_dir / "templates", app_dir / "static", exe_dir / "data"
+
+
+APP_DIR, TEMPLATES_DIR, STATIC_DIR, DATA_DIR = _resolve_paths()
 
 
 @asynccontextmanager
