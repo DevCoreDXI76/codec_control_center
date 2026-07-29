@@ -27,3 +27,12 @@ def test_reboot():
 def test_bookings_list():
     assert cmd.bookings_list() == "xCommand Bookings List Days: 1 DayOffset: 0"
     assert cmd.bookings_list(days=7, day_offset=1) == "xCommand Bookings List Days: 7 DayOffset: 1"
+
+
+def test_bookings_get():
+    assert cmd.bookings_get("meeting-001") == 'xCommand Bookings Get Id: "meeting-001"'
+
+
+def test_bookings_availability_status():
+    assert cmd.STATUS_BOOKINGS_AVAILABILITY == "xStatus Bookings Availability Status"
+    assert cmd.STATUS_BOOKINGS_CURRENT_ID == "xStatus Bookings Current Id"

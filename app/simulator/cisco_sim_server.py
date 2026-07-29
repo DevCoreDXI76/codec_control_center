@@ -2,9 +2,12 @@
 """
 Cisco RoomOS xAPI를 흉내 내는 SSH 모의 서버.
 
-app/drivers/cisco/cisco_commands.py에서 문서 대조로 확정한 명령/응답 포맷만 처리한다.
+app/drivers/cisco/cisco_commands.py에서 문서 대조로 확정한 명령을 처리한다.
 paramiko는 동기(블로킹) API이므로 서버는 스레드 기반으로 동작한다
 (비동기 CiscoDriver는 asyncio.to_thread로 이 블로킹 소켓을 감싼다).
+
+Bookings List/Get의 응답 필드 레이아웃은 공식 문서에 예시가 없어 최선으로
+추정한 것이다 (cisco_commands.py 주석 참고) — Phase③ 실장비 검증 전까지 확정 아님.
 
 기본 포트 127.0.0.1:2222 (SPEC.md 10절 기준).
 """
@@ -18,11 +21,38 @@ import paramiko
 
 
 @dataclass
+class CiscoBooking:
+    meeting_id: str
+    title: str
+    organizer_first: str
+    organizer_last: str
+    start_time: str
+    end_time: str
+    dial_number: str
+    dial_protocol: str = "Sip"
+
+
+@dataclass
 class CiscoSimState:
     muted: bool = False
     in_call: bool = False
     call_id: str = "27"
     call_peer: str | None = None
+    bookings: list[CiscoBooking] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.bookings is None:
+            self.bookings = [
+                CiscoBooking(
+                    meeting_id="meeting-001",
+                    title="주간 전체회의",
+                    organizer_first="Alex",
+                    organizer_last="MacDonald",
+                    start_time="2026-07-29T14:00:00Z",
+                    end_time="2026-07-29T15:00:00Z",
+                    dial_number="sip:weekly@example.com",
+                )
+            ]
 
 
 class _CiscoServerInterface(paramiko.ServerInterface):
@@ -162,7 +192,46 @@ class CiscoSimServer:
             self.state.in_call = False
             self.state.call_peer = None
             return None
+        if command == "xStatus Bookings Availability Status":
+            # 확인됨: RoomOS 11 API Reference Guide p.386
+            value = "BookedUntil" if self.state.bookings else "Free"
+            return f"*s Bookings Availability Status: {value}\r\n** end"
+        if command.startswith("xCommand Bookings List"):
+            return self._bookings_list_response()
+        if command.startswith("xCommand Bookings Get"):
+            meeting_id = _extract_quoted(command)
+            return self._bookings_get_response(meeting_id)
         return None
+
+    def _bookings_list_response(self) -> str:
+        # 미확인(추정): 문서에 List 응답 예시가 없어 다른 다중 응답 명령의
+        # "카테고리 <n> 필드" 평탄화 규칙을 따랐다 (cisco_commands.py 주석 참고).
+        lines = ["*r BookingsListResult (status=OK):", f'  ResultInfo TotalRows: "{len(self.state.bookings)}"']
+        for i, booking in enumerate(self.state.bookings, start=1):
+            lines.append(f'  Booking {i} Id: "{booking.meeting_id}"')
+            lines.append(f'  Booking {i} Title: "{booking.title}"')
+            lines.append(f'  Booking {i} Time StartTime: "{booking.start_time}"')
+            lines.append(f'  Booking {i} Time EndTime: "{booking.end_time}"')
+        lines.append("** end")
+        return "\r\n".join(lines)
+
+    def _bookings_get_response(self, meeting_id: str) -> str:
+        booking = next((b for b in self.state.bookings if b.meeting_id == meeting_id), None)
+        if booking is None:
+            return "*r BookingsGetResult (status=Error):\r\n** end"
+        lines = [
+            "*r BookingsGetResult (status=OK):",
+            f'  Booking Id: "{booking.meeting_id}"',
+            f'  Booking Title: "{booking.title}"',
+            f'  Booking Organizer FirstName: "{booking.organizer_first}"',
+            f'  Booking Organizer LastName: "{booking.organizer_last}"',
+            f'  Booking Time StartTime: "{booking.start_time}"',
+            f'  Booking Time EndTime: "{booking.end_time}"',
+            f'  Booking DialInfo Calls Call 1 Number: "{booking.dial_number}"',
+            f'  Booking DialInfo Calls Call 1 Protocol: "{booking.dial_protocol}"',
+            "** end",
+        ]
+        return "\r\n".join(lines)
 
 
 def _extract_quoted(command: str) -> str:

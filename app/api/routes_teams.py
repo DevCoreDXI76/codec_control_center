@@ -1,11 +1,12 @@
 # app/api/routes_teams.py
 """Teams/OBTP API (SPEC.md 7절).
 
-Cisco는 Bookings List의 JSON 필드 스키마는 확인했으나(레퍼런스: PepperDash
-epi-videoCodec-ciscoExtended), 현재 CiscoDriver는 텍스트 모드로 구현되어 있어
-JSON 스키마를 텍스트 모드로 억지로 끼워 맞추지 않는다 (추측 금지 원칙).
-CiscoDriver.get_calendar_status/get_obtp_entries는 NotImplementedError를
-던지며, 이 라우트는 그 경우 "미지원"으로 정직하게 응답한다.
+Cisco 대상 모델 확정(Room Kit/Room Kit Pro/Room Kit EQ/Room Bar/Room Bar Pro, 2026-07-29)
+이후 get_calendar_status는 공식 문서로 확인된 xStatus Bookings Availability Status로 구현했다.
+get_obtp_entries(회의 상세)는 Bookings List/Get 응답의 정확한 텍스트 필드 레이아웃이
+공식 문서에 예시가 없어 최선으로 추정한 것이며 Phase③ 실장비 검증 전까지 확정이 아니다
+(app/drivers/cisco/cisco_commands.py 주석 참고). 그래도 명령 자체가 실패하면(NotImplementedError가
+아닌 DriverError) 이 라우트는 502로 응답한다 — "미지원"은 이제 발생하지 않는다.
 """
 from __future__ import annotations
 

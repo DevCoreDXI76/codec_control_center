@@ -194,18 +194,70 @@ class CiscoDriver(DeviceDriver):
         return True
 
     async def get_calendar_status(self) -> str:
-        # Cisco Bookings API 응답 스키마 미확인 (대상 모델 미확정 — PRD 오픈 이슈).
-        # 추측 구현 대신 명시적으로 미구현 처리 — Phase④에서 모델 확정 후 문서 재확인.
-        raise NotImplementedError(
-            "Cisco 캘린더 상태 조회는 대상 모델 확정 및 Bookings API 문서 재확인 후 구현 예정 (Phase④)"
-        )
+        return await asyncio.to_thread(self._get_calendar_status_sync)
+
+    def _get_calendar_status_sync(self) -> str:
+        # 확인됨(RoomOS 11 API Reference Guide p.386): xStatus Bookings Availability Status는
+        # Free/FreeUntil/BookedUntil 중 하나를 항상 반환한다. Poly의 "Exchange 등록 여부"와는
+        # 개념이 다르지만(예약 기능 자체가 응답 가능한 상태인지), 값이 오면 예약 기능이
+        # 정상 동작 중이라는 뜻이므로 "registered"로 매핑한다.
+        lines = self._call_block_sync(cmd.STATUS_BOOKINGS_AVAILABILITY)
+        for line in lines:
+            if line.startswith("*s Bookings Availability Status:"):
+                return "registered"
+        return "error"
 
     async def get_obtp_entries(self) -> list[CalendarEntry]:
-        raise NotImplementedError(
-            "Cisco Bookings List 응답 스키마 미확인 — 대상 모델 확정 후 구현 예정 (Phase④)"
-        )
+        return await asyncio.to_thread(self._get_obtp_entries_sync)
+
+    def _get_obtp_entries_sync(self) -> list[CalendarEntry]:
+        # 주의: Bookings List/Get의 필드 레이아웃은 공식 문서에 응답 예시가 없어
+        # 최선으로 추정한 것이다 (cisco_commands.py 주석 참고). Phase③ 실장비 검증 필요.
+        list_lines = self._call_block_sync(cmd.bookings_list())
+        meeting_ids = _extract_meeting_ids(list_lines)
+
+        entries: list[CalendarEntry] = []
+        for meeting_id in meeting_ids:
+            detail_lines = self._call_block_sync(cmd.bookings_get(meeting_id))
+            entry = _parse_booking_detail(detail_lines)
+            if entry is not None:
+                entries.append(entry)
+        return entries
 
     async def join_meeting(self, entry: CalendarEntry) -> bool:
         if not entry.join_uri:
             raise DriverCommandError("meeting has no dialable join_uri")
         return await self.dial(entry.join_uri)
+
+
+def _extract_meeting_ids(list_lines: list[str]) -> list[str]:
+    """"Booking <n> Id: "<id>"" 형태의 줄에서 회의 ID만 뽑는다 (추정 포맷)."""
+    ids: list[str] = []
+    for raw in list_lines:
+        line = raw.strip()
+        key, sep, value = line.partition(": ")
+        if not sep:
+            continue
+        if key.startswith("Booking ") and key.endswith(" Id"):
+            ids.append(value.strip('"'))
+    return ids
+
+
+def _parse_booking_detail(detail_lines: list[str]) -> CalendarEntry | None:
+    """"Booking <Field>: "<value>"" 형태의 줄들을 CalendarEntry로 변환한다 (추정 포맷)."""
+    fields: dict[str, str] = {}
+    for raw in detail_lines:
+        line = raw.strip()
+        key, sep, value = line.partition(": ")
+        if not sep or not key.startswith("Booking "):
+            continue
+        fields[key[len("Booking ") :]] = value.strip('"')
+
+    if "Title" not in fields:
+        return None
+    return CalendarEntry(
+        subject=fields.get("Title", ""),
+        start_time=fields.get("Time StartTime", ""),
+        end_time=fields.get("Time EndTime", ""),
+        join_uri=fields.get("DialInfo Calls Call 1 Number"),
+    )

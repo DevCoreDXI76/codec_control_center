@@ -65,12 +65,41 @@ async def test_reboot_returns_true_without_hanging(sim_and_driver):
     assert await driver.reboot() is True
 
 
-async def test_calendar_methods_raise_not_implemented(sim_and_driver):
+async def test_get_calendar_status_registered_when_bookings_present(sim_and_driver):
     _sim, driver = sim_and_driver
-    with pytest.raises(NotImplementedError):
-        await driver.get_calendar_status()
-    with pytest.raises(NotImplementedError):
-        await driver.get_obtp_entries()
+    assert await driver.get_calendar_status() == "registered"
+
+
+async def test_get_calendar_status_registered_when_no_bookings(sim_and_driver):
+    sim, driver = sim_and_driver
+    sim.state.bookings = []
+    # 예약이 없어도 Bookings Availability Status 자체는 응답하므로 기능은 "registered"
+    assert await driver.get_calendar_status() == "registered"
+
+
+async def test_get_obtp_entries_returns_seeded_meeting(sim_and_driver):
+    _sim, driver = sim_and_driver
+    entries = await driver.get_obtp_entries()
+    assert len(entries) == 1
+    entry = entries[0]
+    assert isinstance(entry, CalendarEntry)
+    assert entry.subject == "주간 전체회의"
+    assert entry.join_uri == "sip:weekly@example.com"
+
+
+async def test_get_obtp_entries_empty_when_no_bookings(sim_and_driver):
+    sim, driver = sim_and_driver
+    sim.state.bookings = []
+    entries = await driver.get_obtp_entries()
+    assert entries == []
+
+
+async def test_cisco_join_meeting_from_obtp_entry(sim_and_driver):
+    sim, driver = sim_and_driver
+    entries = await driver.get_obtp_entries()
+    assert await driver.join_meeting(entries[0]) is True
+    assert sim.state.in_call is True
+    assert sim.state.call_peer == "sip:weekly@example.com"
 
 
 async def test_join_meeting_dials_join_uri(sim_and_driver):

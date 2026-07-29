@@ -108,6 +108,6 @@
 
 ## 10. 오픈 이슈
 
-- Cisco 대상 모델(구체 기종) 미확정 — Phase ⑤ 착수 전 API Reference Guide 확인 후 확정 필요.
+- ~~Cisco 대상 모델(구체 기종) 미확정~~ → 2026-07-29 확정: Room Kit, Room Kit Pro, Room Kit EQ, Room Bar, Room Bar Pro (전부 Cisco RoomOS 통합 xAPI 사용 — Phase①에서 확정한 mute/dial/hangup/reboot/status 명령 그대로 적용됨).
 - Teams 회의 참가 시 코덱별 SIP/CVI 게이트웨이 주소 형식 확인 필요 (사내 Teams Direct Guest Join / CVI 구성 확인).
 - 폴링 주기 기본값(예: 10~30초) 및 보안팀 협의 필요 여부 확인.

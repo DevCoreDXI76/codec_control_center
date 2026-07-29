@@ -68,6 +68,39 @@ def test_unknown_command_returns_none():
     assert sim.handle("xCommand NoSuchThing") is None
 
 
+def test_bookings_availability_status():
+    sim = CiscoSimServer()
+    resp = sim.handle("xStatus Bookings Availability Status")
+    assert resp == "*s Bookings Availability Status: BookedUntil\r\n** end"
+
+    sim.state.bookings = []
+    resp = sim.handle("xStatus Bookings Availability Status")
+    assert resp == "*s Bookings Availability Status: Free\r\n** end"
+
+
+def test_bookings_list_returns_seeded_meeting():
+    sim = CiscoSimServer()
+    resp = sim.handle("xCommand Bookings List Days: 1 DayOffset: 0")
+    assert resp.startswith("*r BookingsListResult (status=OK):")
+    assert 'Booking 1 Id: "meeting-001"' in resp
+    assert 'Booking 1 Title: "주간 전체회의"' in resp
+    assert resp.endswith("** end")
+
+
+def test_bookings_get_returns_detail():
+    sim = CiscoSimServer()
+    resp = sim.handle('xCommand Bookings Get Id: "meeting-001"')
+    assert resp.startswith("*r BookingsGetResult (status=OK):")
+    assert 'Booking Organizer FirstName: "Alex"' in resp
+    assert 'Booking DialInfo Calls Call 1 Number: "sip:weekly@example.com"' in resp
+
+
+def test_bookings_get_unknown_id_returns_error():
+    sim = CiscoSimServer()
+    resp = sim.handle('xCommand Bookings Get Id: "no-such-id"')
+    assert "status=Error" in resp
+
+
 # --- 실제 SSH 소켓 통합 테스트 (server 기동 -> paramiko client 접속 -> 명령/응답) ---
 
 

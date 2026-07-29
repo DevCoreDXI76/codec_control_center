@@ -2,16 +2,17 @@
 """
 Cisco RoomOS (Webex Room/Desk/Board, SX/MX 등 xAPI 공통) SSH 명령어 상수.
 
-대상 정확한 기종은 아직 미확정 (PRD 오픈 이슈 — Phase⑤ 착수 전 확정 필요).
-아래는 RoomOS 전반에서 공통인 "System Commands" 수준 xAPI만 사용하며,
-근거는 다음 두 곳에서 상호 확인함:
+대상 기종 확정 (2026-07-29, PRD 오픈 이슈 해소): Room Kit, Room Kit Pro,
+Room Kit EQ, Room Bar, Room Bar Pro — 전부 RoomOS 통합 xAPI를 사용한다.
+
+근거는 다음 세 곳에서 상호 확인함:
   1) Cisco 공식 RoomOS 문서 소스 (github.com/cisco-ce/roomos.cisco.com,
      doc/TechDocs/xAPI.md — CE 9.14 API Reference Guide 발췌)
      -> 명령/응답 문법, 대소문자 무관, 공백 포함 값은 따옴표 필요, 응답 프리픽스(*s/*c/*r) 확인.
   2) 실제 프로덕션 RoomOS 드라이버 (github.com/PepperDash/epi-videoCodec-ciscoExtended,
-     src/CiscoCodec.cs) -> 아래 각 명령의 정확한 문자열 확인.
-모델별로 다를 수 있는 심화 기능(Bookings List 응답 스키마 등)은 여기 포함하지 않는다 —
-Phase④/⑤에서 대상 모델 확정 후 문서 재확인 필요.
+     src/CiscoCodec.cs, src/BookingsDataClasses.cs) -> 명령 문자열·JSON 응답 필드명 확인.
+  3) Cisco 공식 "Cisco collaboration devices RoomOS 11 API Reference Guide"
+     (D15502.02, 2023-02) 전문 — 명령 문법과 일부 응답 예시(Bookings status 등) 확인.
 """
 
 # --- Audio Microphones Mute/Unmute (파라미터 없음) ---
@@ -47,8 +48,26 @@ STATUS_CALL = "xStatus Call"
 # 확인: CiscoCodec.cs Reboot() -> "xCommand SystemUnit Boot Action: Restart"
 SYSTEMUNIT_BOOT_RESTART = "xCommand SystemUnit Boot Action: Restart"
 
-# --- Bookings (OBTP) — 명령/파라미터만 확인, 응답 스키마는 모델 확정 후 재확인 필요 ---
-# 확인: BookingsWorkspaceIntegration.md(xCommand.Bookings.List 존재) + CiscoCodec.cs
-#      ("xCommand Bookings List Days: 1 DayOffset: 0")
+# --- 캘린더/Bookings 상태 — 완전히 확인됨 ---
+# 확인: RoomOS 11 API Reference Guide (D15502.02) p.386 "Bookings status", 응답 예시 포함:
+#   xStatus Bookings Availability Status -> *s Bookings Availability Status: Free
+#   (값: Free/FreeUntil/BookedUntil)
+#   xStatus Bookings Current Id -> *s Bookings Current Id: "123"
+STATUS_BOOKINGS_AVAILABILITY = "xStatus Bookings Availability Status"
+STATUS_BOOKINGS_CURRENT_ID = "xStatus Bookings Current Id"
+
+# --- Bookings List/Get (OBTP 목록) — 명령 문법은 확인, 응답의 상세 필드 레이아웃은 미확인 ---
+# 확인(명령 문법): RoomOS 11 API Reference Guide p.257 "xCommand Bookings List"/"xCommand Bookings Get"
+#   xCommand Bookings List [Days:] [DayOffset:] [Limit:] [Offset:]
+#   xCommand Bookings Get Id:"<meeting id>"
+# 미확인: 위 두 명령이 실제로 돌려주는 회의 상세(제목/주최자/발신주소 등)의 텍스트 모드
+#   줄 단위 필드 레이아웃 — 공식 문서에 응답 예시가 없다. cisco_driver.py의 파서는
+#   PepperDash BookingsDataClasses.cs(JSON 스키마)와 이 문서의 다른 다중 응답 명령들에서
+#   일관되게 쓰이는 "카테고리 <n> 필드" 평탄화 규칙을 조합해 최선으로 추정한 것이며,
+#   Phase③ 실장비 검증 전까지는 확정이 아니다.
 def bookings_list(days: int = 1, day_offset: int = 0) -> str:
     return f"xCommand Bookings List Days: {days} DayOffset: {day_offset}"
+
+
+def bookings_get(meeting_id: str) -> str:
+    return f'xCommand Bookings Get Id: "{meeting_id}"'
