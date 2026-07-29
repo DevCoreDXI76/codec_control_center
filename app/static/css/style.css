@@ -1,5 +1,7 @@
 /* UX_SPEC.md 3절 — 상태 색상 규칙 (색+아이콘+텍스트 3중 표기) */
-:root {
+/* UX_SPEC.md 7절 — 다크모드 토글 (선택 사항). data-theme 속성 + prefers-color-scheme 둘 다 지원. */
+:root,
+:root[data-theme="light"] {
   --color-online: #16a34a;
   --color-call: #2563eb;
   --color-warn: #d97706;
@@ -10,7 +12,44 @@
   --color-text: #1e293b;
   --color-text-muted: #64748b;
   --color-border: #e2e8f0;
+  --color-alert-bg: #fef2f2;
+  --color-success-bg: #dcfce7;
+  --color-fail-bg: #fee2e2;
   --sidebar-width: 200px;
+}
+
+:root[data-theme="dark"] {
+  --color-online: #22c55e;
+  --color-call: #3b82f6;
+  --color-warn: #f59e0b;
+  --color-error: #f87171;
+  --color-sim: #c084fc;
+  --color-bg: #0f172a;
+  --color-card-bg: #1e293b;
+  --color-text: #e2e8f0;
+  --color-text-muted: #94a3b8;
+  --color-border: #334155;
+  --color-alert-bg: #451a1a;
+  --color-success-bg: #14532d;
+  --color-fail-bg: #450a0a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-online: #22c55e;
+    --color-call: #3b82f6;
+    --color-warn: #f59e0b;
+    --color-error: #f87171;
+    --color-sim: #c084fc;
+    --color-bg: #0f172a;
+    --color-card-bg: #1e293b;
+    --color-text: #e2e8f0;
+    --color-text-muted: #94a3b8;
+    --color-border: #334155;
+    --color-alert-bg: #451a1a;
+    --color-success-bg: #14532d;
+    --color-fail-bg: #450a0a;
+  }
 }
 
 * {
@@ -22,6 +61,19 @@ body {
   font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
   background: var(--color-bg);
   color: var(--color-text);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.theme-toggle-btn {
+  border: 1px solid var(--color-border);
+  background: var(--color-card-bg);
+  color: var(--color-text);
+  border-radius: 999px;
+  width: 2rem;
+  height: 2rem;
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
 }
 
 .topbar {
@@ -87,7 +139,7 @@ body {
 }
 
 .alert-banner {
-  background: #fef2f2;
+  background: var(--color-alert-bg);
   border: 1px solid var(--color-error);
   color: var(--color-error);
   border-radius: 8px;
@@ -309,7 +361,7 @@ body {
 }
 
 .modal {
-  background: #fff;
+  background: var(--color-card-bg);
   border-radius: 10px;
   padding: 1.25rem 1.5rem;
   width: 420px;
@@ -354,7 +406,7 @@ body {
   position: fixed;
   bottom: 1.5rem;
   right: 1.5rem;
-  background: var(--color-text);
+  background: #1e293b;
   color: #fff;
   padding: 0.6rem 1rem;
   border-radius: 8px;
@@ -419,11 +471,11 @@ body {
 }
 
 .log-ok {
-  background: #dcfce7;
+  background: var(--color-success-bg);
   color: var(--color-online);
 }
 
 .log-fail {
-  background: #fee2e2;
+  background: var(--color-fail-bg);
   color: var(--color-error);
 }
