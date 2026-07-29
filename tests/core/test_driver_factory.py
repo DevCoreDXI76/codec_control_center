@@ -51,3 +51,27 @@ def test_unknown_device_raises_keyerror(registry, vault):
     factory = build_driver_factory(registry, vault)
     with pytest.raises(KeyError):
         factory("no-such-id")
+
+
+def test_uses_default_timeout_when_no_get_timeout_given(registry, vault):
+    credential_ref = vault.store(json.dumps({"username": "admin", "password": "pw"}))
+    device = registry.add_device(
+        name="poly room", vendor="poly", connection_type="telnet",
+        host="127.0.0.1", port=2323, group="3F", credential_ref=credential_ref, is_simulated=True,
+    )
+    factory = build_driver_factory(registry, vault)
+    assert factory(device.id).timeout == 7.0
+
+
+def test_get_timeout_is_called_dynamically_per_driver_creation(registry, vault):
+    credential_ref = vault.store(json.dumps({"username": "admin", "password": "pw"}))
+    device = registry.add_device(
+        name="poly room", vendor="poly", connection_type="telnet",
+        host="127.0.0.1", port=2323, group="3F", credential_ref=credential_ref, is_simulated=True,
+    )
+    current_timeout = {"value": 5.0}
+    factory = build_driver_factory(registry, vault, get_timeout=lambda: current_timeout["value"])
+
+    assert factory(device.id).timeout == 5.0
+    current_timeout["value"] = 20.0
+    assert factory(device.id).timeout == 20.0

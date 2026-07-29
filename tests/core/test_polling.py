@@ -156,6 +156,18 @@ async def test_semaphore_limits_concurrency(registry):
     assert registry.max_concurrent <= 2
 
 
+async def test_update_concurrency_changes_semaphore_limit(registry):
+    scheduler = PollingScheduler(driver_factory=registry.factory, base_interval=15.0, max_concurrency=1)
+    scheduler.update_concurrency(5)
+    assert scheduler.max_concurrency == 5
+
+    device_ids = [f"dev-{i}" for i in range(6)]
+    for device_id in device_ids:
+        await scheduler.add_device(device_id)
+    await asyncio.gather(*(scheduler.poll_once(device_id) for device_id in device_ids))
+    assert registry.max_concurrent <= 5
+
+
 async def test_start_and_stop_lifecycle_disconnects_drivers(registry):
     scheduler = PollingScheduler(driver_factory=registry.factory, base_interval=0.05)
     await scheduler.add_device("dev-1")

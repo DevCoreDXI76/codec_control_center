@@ -48,10 +48,16 @@ class PollingScheduler:
         self._driver_factory = driver_factory
         self.base_interval = base_interval
         self.max_interval = max_interval
+        self.max_concurrency = max_concurrency
         self._semaphore = asyncio.Semaphore(max_concurrency)
         self._on_status = on_status
         self._runtimes: dict[str, _DeviceRuntime] = {}
         self._running = False
+
+    def update_concurrency(self, max_concurrency: int) -> None:
+        """설정 변경 시 동시 접속 제한을 갱신한다 (다음 폴링부터 적용)."""
+        self.max_concurrency = max_concurrency
+        self._semaphore = asyncio.Semaphore(max_concurrency)
 
     async def add_device(self, device_id: str, interval: float | None = None) -> DeviceStatus | None:
         """장비를 스케줄러에 등록한다.

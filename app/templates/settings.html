@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>설정 - Codec Control Center</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <script defer src="/static/vendor/alpine.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1>● Codec Control Center</h1>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar">
+      <a href="/">대시보드</a>
+      <a href="#">장비관리</a>
+      <a href="#">Teams</a>
+      <a class="active" href="/settings">설정</a>
+    </nav>
+
+    <main class="main">
+      <div
+        class="settings-panel"
+        x-data="{
+          poll_interval: {{ settings.poll_interval }},
+          max_concurrency: {{ settings.max_concurrency }},
+          command_timeout: {{ settings.command_timeout }},
+          open_browser_on_start: {{ 'true' if settings.open_browser_on_start else 'false' }},
+          saving: false,
+          error: '',
+          saved: false,
+          async submit() {
+            this.saving = true;
+            this.error = '';
+            this.saved = false;
+            const resp = await fetch('/api/settings', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                poll_interval: Number(this.poll_interval),
+                max_concurrency: Number(this.max_concurrency),
+                command_timeout: Number(this.command_timeout),
+                open_browser_on_start: this.open_browser_on_start,
+              }),
+            });
+            this.saving = false;
+            if (!resp.ok) {
+              const detail = await resp.json().catch(() => ({}));
+              this.error = typeof detail.detail === 'string' ? detail.detail : '저장 실패';
+              return;
+            }
+            this.saved = true;
+            setTimeout(() => (this.saved = false), 2000);
+          },
+        }"
+      >
+        <h2>설정</h2>
+        <form @submit.prevent="submit()" class="settings-form">
+          <div class="field">
+            <label>폴링 주기 (초)</label>
+            <input type="number" min="1" max="300" step="1" x-model="poll_interval" required />
+          </div>
+          <div class="field">
+            <label>동시 접속 제한 (대)</label>
+            <input type="number" min="1" max="64" step="1" x-model="max_concurrency" required />
+          </div>
+          <div class="field">
+            <label>명령 타임아웃 (초)</label>
+            <input type="number" min="1" max="60" step="1" x-model="command_timeout" required />
+          </div>
+          <div class="field">
+            <label>데이터 저장 경로</label>
+            <input type="text" value="{{ data_dir }}" readonly />
+          </div>
+          <div class="field">
+            <label><input type="checkbox" x-model="open_browser_on_start" /> 시작 시 자동으로 브라우저 열기</label>
+          </div>
+          <p class="error-text" x-show="error" x-text="error"></p>
+          <p class="meta" x-show="saved" style="color: var(--color-online)">저장되었습니다.</p>
+          <div class="modal-actions">
+            <button class="btn btn-primary" type="submit" :disabled="saving">저장</button>
+          </div>
+        </form>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

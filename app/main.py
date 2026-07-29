@@ -12,12 +12,14 @@ from fastapi.templating import Jinja2Templates
 
 from app.api.routes_control import router as control_router
 from app.api.routes_devices import router as devices_router
+from app.api.routes_settings import router as settings_router
 from app.api.routes_teams import router as teams_router
 from app.api.ws_status import StatusBroadcaster
 from app.api.ws_status import router as ws_status_router
 from app.core.driver_factory import build_driver_factory
 from app.core.polling import PollingScheduler
 from app.core.registry import DeviceRegistry
+from app.core.settings import SettingsStore
 from app.core.vault import CredentialVault
 
 APP_DIR = Path(__file__).resolve().parent
@@ -42,14 +44,24 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 app.state.registry = DeviceRegistry(DATA_DIR / "devices.enc.json")
 app.state.vault = CredentialVault(DATA_DIR / "credentials.enc.json")
 app.state.broadcaster = StatusBroadcaster()
+app.state.settings_store = SettingsStore(DATA_DIR / "settings.json")
+app.state.settings = app.state.settings_store.load()
+
 app.state.scheduler = PollingScheduler(
-    driver_factory=build_driver_factory(app.state.registry, app.state.vault),
+    driver_factory=build_driver_factory(
+        app.state.registry,
+        app.state.vault,
+        get_timeout=lambda: app.state.settings.command_timeout,
+    ),
+    base_interval=app.state.settings.poll_interval,
+    max_concurrency=app.state.settings.max_concurrency,
     on_status=app.state.broadcaster.notify,
 )
 
 app.include_router(devices_router)
 app.include_router(control_router)
 app.include_router(teams_router)
+app.include_router(settings_router)
 app.include_router(ws_status_router)
 
 
@@ -66,3 +78,11 @@ async def dashboard(request: Request):
     devices = [{"device": device, "status": scheduler.get_status(device.id)} for device in device_list]
     groups = sorted({device.group for device in device_list if device.group})
     return templates.TemplateResponse(request, "index.html", {"devices": devices, "groups": groups})
+
+
+@app.get("/settings")
+async def settings_page(request: Request):
+    settings = request.app.state.settings_store.load()
+    return templates.TemplateResponse(
+        request, "settings.html", {"settings": settings, "data_dir": str(DATA_DIR)}
+    )
