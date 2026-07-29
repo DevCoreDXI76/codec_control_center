@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>로그 - Codec Control Center</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>● Codec Control Center</h1>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar">
+      <a href="/">대시보드</a>
+      <a href="#">장비관리</a>
+      <a href="#">Teams</a>
+      <a href="/settings">설정</a>
+      <a class="active" href="/logs">로그</a>
+    </nav>
+
+    <main class="main">
+      <h2>제어 이력</h2>
+      {% if entries %}
+      <div class="log-table-wrap">
+        <table class="log-table">
+          <thead>
+            <tr>
+              <th>시각</th>
+              <th>장비</th>
+              <th>동작</th>
+              <th>결과</th>
+              <th>상세</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for e in entries %}
+            <tr>
+              <td>{{ e.created_at }}</td>
+              <td>{{ e.device_name }}</td>
+              <td>{{ e.action }}</td>
+              <td>
+                {% if e.success %}
+                <span class="log-badge log-ok">성공</span>
+                {% else %}
+                <span class="log-badge log-fail">실패</span>
+                {% endif %}
+              </td>
+              <td>{{ e.detail or '' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <p>아직 기록된 제어 이력이 없습니다.</p>
+      </div>
+      {% endif %}
+    </main>
+  </div>
+</body>
+</html>

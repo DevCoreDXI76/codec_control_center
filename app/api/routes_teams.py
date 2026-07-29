@@ -15,7 +15,9 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.core.driver_base import CalendarEntry, DriverError
+from app.core.history import ControlHistory
 from app.core.polling import PollingScheduler
+from app.core.registry import DeviceRegistry
 
 router = APIRouter(prefix="/api/devices", tags=["teams"])
 
@@ -65,6 +67,11 @@ async def get_obtp(device_id: str, request: Request) -> dict:
 @router.post("/{device_id}/join")
 async def join_meeting(device_id: str, payload: JoinRequest, request: Request) -> dict:
     driver = await _get_driver(request, device_id)
+    history: ControlHistory = request.app.state.history
+    registry: DeviceRegistry = request.app.state.registry
+    device = registry.get_device(device_id)
+    device_name = device.name if device is not None else device_id
+
     entry = CalendarEntry(
         subject=payload.subject,
         start_time=payload.start_time,
@@ -74,5 +81,7 @@ async def join_meeting(device_id: str, payload: JoinRequest, request: Request) -
     try:
         ok = await driver.join_meeting(entry)
     except DriverError as exc:
+        history.log(device_id=device_id, device_name=device_name, action="join", success=False, detail=str(exc))
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    history.log(device_id=device_id, device_name=device_name, action="join", success=ok, detail=payload.subject)
     return {"ok": ok}

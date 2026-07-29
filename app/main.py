@@ -12,11 +12,13 @@ from fastapi.templating import Jinja2Templates
 
 from app.api.routes_control import router as control_router
 from app.api.routes_devices import router as devices_router
+from app.api.routes_logs import router as logs_router
 from app.api.routes_settings import router as settings_router
 from app.api.routes_teams import router as teams_router
 from app.api.ws_status import StatusBroadcaster
 from app.api.ws_status import router as ws_status_router
 from app.core.driver_factory import build_driver_factory
+from app.core.history import ControlHistory
 from app.core.polling import PollingScheduler
 from app.core.registry import DeviceRegistry
 from app.core.settings import SettingsStore
@@ -46,6 +48,7 @@ app.state.vault = CredentialVault(DATA_DIR / "credentials.enc.json")
 app.state.broadcaster = StatusBroadcaster()
 app.state.settings_store = SettingsStore(DATA_DIR / "settings.json")
 app.state.settings = app.state.settings_store.load()
+app.state.history = ControlHistory(DATA_DIR / "history.sqlite3")
 
 app.state.scheduler = PollingScheduler(
     driver_factory=build_driver_factory(
@@ -62,6 +65,7 @@ app.include_router(devices_router)
 app.include_router(control_router)
 app.include_router(teams_router)
 app.include_router(settings_router)
+app.include_router(logs_router)
 app.include_router(ws_status_router)
 
 
@@ -86,3 +90,9 @@ async def settings_page(request: Request):
     return templates.TemplateResponse(
         request, "settings.html", {"settings": settings, "data_dir": str(DATA_DIR)}
     )
+
+
+@app.get("/logs")
+async def logs_page(request: Request):
+    entries = request.app.state.history.list_recent(limit=200)
+    return templates.TemplateResponse(request, "logs.html", {"entries": entries})

@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.driver_factory import build_driver_factory
+from app.core.history import ControlHistory
 from app.core.polling import PollingScheduler
 from app.core.registry import DeviceRegistry
 from app.core.vault import CredentialVault
@@ -32,6 +33,7 @@ def client(tmp_path):
     app.state.scheduler = PollingScheduler(
         driver_factory=build_driver_factory(app.state.registry, app.state.vault)
     )
+    app.state.history = ControlHistory(tmp_path / "history.sqlite3")
     return TestClient(app)
 
 
@@ -75,6 +77,23 @@ def test_mute_reflected_in_simulator_state(client, cisco_sim):
     resp = client.post(f"/api/devices/{device_id}/mute", json={"on": False})
     assert resp.json() == {"ok": True}
     assert cisco_sim.state.muted is False
+
+
+def test_mute_logs_to_history(client, cisco_sim):
+    device_id = _register_cisco_device(cisco_sim)
+    client.post(f"/api/devices/{device_id}/mute", json={"on": True})
+    entries = app.state.history.list_recent()
+    assert len(entries) == 1
+    assert entries[0].action == "mute"
+    assert entries[0].success is True
+    assert entries[0].device_id == device_id
+
+
+def test_failed_control_logs_failure_to_history(client):
+    resp = client.post("/api/devices/no-such-id/mute", json={"on": True})
+    assert resp.status_code == 404
+    # 장비 자체를 못 찾은 경우(404)는 이력에 남기지 않는다 (실행된 명령이 없으므로)
+    assert app.state.history.list_recent() == []
 
 
 def test_dial_and_hangup(client, cisco_sim):

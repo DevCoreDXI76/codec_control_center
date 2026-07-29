@@ -8,6 +8,7 @@ from app.core.driver_base import (
     DeviceDriver,
     DeviceStatus,
 )
+from app.core.history import ControlHistory
 from app.core.polling import PollingScheduler
 from app.core.registry import DeviceRegistry
 from app.core.vault import CredentialVault
@@ -73,6 +74,7 @@ class FakeTeamsDriver(DeviceDriver):
 def client(tmp_path):
     app.state.registry = DeviceRegistry(tmp_path / "devices.enc.json")
     app.state.vault = CredentialVault(tmp_path / "credentials.enc.json")
+    app.state.history = ControlHistory(tmp_path / "history.sqlite3")
     return TestClient(app)
 
 
