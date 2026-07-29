@@ -29,6 +29,15 @@
         <span>통화중 <strong data-stat="call">{{ devices|selectattr('status')|selectattr('status.in_call')|list|length }}</strong></span>
       </div>
 
+      {% if devices %}
+      <div class="meetings-widget">
+        <h2>오늘의 예정 회의</h2>
+        <div id="meetings-list" class="meetings-list">
+          <p class="meta">불러오는 중...</p>
+        </div>
+      </div>
+      {% endif %}
+
       <div class="toolbar" x-data="deviceForm()">
         <div></div>
         <button class="btn btn-primary" type="button" @click="open = true">+ 장비 등록</button>

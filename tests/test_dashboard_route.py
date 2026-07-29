@@ -23,6 +23,7 @@ def test_dashboard_empty_state(tmp_path):
     resp = client.get("/")
     assert resp.status_code == 200
     assert "등록된 장비가 없습니다" in resp.text
+    assert 'id="meetings-list"' not in resp.text  # 장비 없으면 회의 위젯도 숨김
 
 
 def test_dashboard_renders_device_card(tmp_path):
@@ -43,3 +44,5 @@ def test_dashboard_renders_device_card(tmp_path):
     assert "3층 대회의실" in resp.text
     assert f'data-device-id="{device.id}"' in resp.text
     assert "SIM" in resp.text
+    assert 'id="meetings-list"' in resp.text
+    assert "오늘의 예정 회의" in resp.text
