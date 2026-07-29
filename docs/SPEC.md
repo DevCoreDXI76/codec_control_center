@@ -2,7 +2,7 @@
 
 - 문서 버전: v1.0
 - 작성일: 2026-07-28
-- 연관 문서: `PRD.md`, `PLAN.md`, `UX_SPEC.md`(화면설계서 — 프론트엔드 구현 스택 및 화면별 상세 설계는 해당 문서 참조)
+- 연관 문서: `PRD.md`, `PLAN.md`, `UX_SPEC.md`(화면설계서 — 프론트엔드 구현 스택 및 화면별 상세 설계는 해당 문서 참조), `PIPELINE.md`(테스트/QA/릴리즈 절차)
 
 > 본 문서에 등장하는 Poly/Cisco 구체 CLI·xAPI 명령어는 **예시(placeholder)**이며, 실제 구현 시 반드시 Poly Integrator Reference Guide(Group/HDX) 및 Cisco 해당 모델 API Reference Guide(xAPI)를 검색·대조하여 확정한다. 확인되지 않은 명령은 추측하여 구현하지 않는다.
 
@@ -276,6 +276,7 @@ class DeviceDriver(ABC):
 - `data/` 폴더(암호화된 레지스트리)는 실행 파일과 같은 경로 또는 `%APPDATA%` 하위에 생성.
 - **장비 추가/IP 변경/이름 변경 등은 재배포 대상이 아니다.** 장비 등록 정보는 exe(코드)와 분리된 `data/` 폴더에 저장되며, 앱 내 UI(장비 등록/수정 화면, `UX_SPEC.md` 4.3절)에서 사용자가 직접 추가·수정·삭제한다. 변경 즉시 로컬 파일에 반영되고 서버(=exe) 재배포는 필요 없다.
 - 재배포(새 exe 배포)가 필요한 경우는 **앱 자체의 기능 추가/버그 수정 등 코드 변경 시**로 한정한다. 이때도 `data/` 경로(실행 파일과 동일 폴더 또는 `%APPDATA%`)를 유지한 채 exe만 교체하면 기존에 등록된 장비 목록/자격증명이 그대로 유지된다 — 배포 가이드에 "설치 폴더의 `data/`는 삭제하지 말 것"을 명시한다.
+- 재배포 전 거쳐야 하는 테스트/QA/버전·태그 절차는 `PIPELINE.md`에 별도로 정리되어 있다 — 이 절이 다루는 건 "무엇을 배포하는가"이고, "어떤 절차로 배포 가능 상태를 확정하는가"는 `PIPELINE.md`를 따른다.
 
 ### 11.1 exe 파일 전달 방법 — Gmail 첨부 사용 금지
 
@@ -307,6 +308,12 @@ class DeviceDriver(ABC):
 - Cisco 계정은 최소 **USER** 역할이 있어야 mute/dial/reboot이 전부 동작한다
   (RoomOS 11 API Reference Guide 확인 — 상세는 `cisco_commands.py` 상단 주석).
   장비 등록 시 계정 권한 부족으로 인한 실패를 예방하려면 이 요구사항을 사용자에게 안내할 것.
+- 폴링 실패, 제어 API(mute/dial/hangup/reboot) 실패는 `data/app.log`에 파일로도 남는다
+  (`RotatingFileHandler`, 5MB × 3, `app/main.py:_configure_logging()`). 로그에는 device_id
+  대신 장비 이름을 남겨 어느 회의실인지 바로 식별 가능하게 하고, `DriverError`(예상된 접속/
+  명령 오류)는 warning으로, 그 외 예상 밖 예외는 트레이스백을 포함한 error로 구분 기록한다
+  (2026-07-29, v1.1.0 — Phase③ 실장비 검증 중 UI만으로는 원인 파악이 어려운 접속 문제를
+  분석하기 위해 추가).
 
 ## 13. Phase⑤ 검토 사항 (Cisco 드라이버 확장)
 

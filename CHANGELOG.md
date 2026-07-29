@@ -2,6 +2,7 @@
 
 이 프로젝트의 모든 주요 변경사항을 이 파일에 기록한다.
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/)를, 버전은 [Semantic Versioning](https://semver.org/lang/ko/)을 따른다.
+언제 버전을 올리고 태그를 남기는지 등 절차 전체는 `docs/PIPELINE.md` 참조.
 
 ## [Unreleased]
 
