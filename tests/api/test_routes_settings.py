@@ -68,7 +68,10 @@ def test_update_settings_out_of_range_returns_422(client):
 
 
 def test_settings_page_renders(client):
+    from app.__version__ import __version__
+
     resp = client.get("/settings")
     assert resp.status_code == 200
     assert "설정" in resp.text
     assert "폴링 주기" in resp.text
+    assert f"v{__version__}" in resp.text

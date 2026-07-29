@@ -6,10 +6,12 @@ from app.main import app
 
 
 def test_health_check():
+    from app.__version__ import __version__
+
     client = TestClient(app)
     response = client.get("/api/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {"status": "ok", "version": __version__}
 
 
 def test_resolve_paths_dev_mode():

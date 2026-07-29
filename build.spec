@@ -2,6 +2,8 @@
 # 실행: pyinstaller build.spec
 from __future__ import annotations
 
+from app.__version__ import __version__
+
 block_cipher = None
 
 a = Analysis(
@@ -43,7 +45,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name="CodecControlCenter",
+    name=f"CodecControlCenter-v{__version__}",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

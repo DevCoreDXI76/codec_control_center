@@ -11,6 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from app.__version__ import __version__
 from app.api.routes_control import router as control_router
 from app.api.routes_devices import router as devices_router
 from app.api.routes_logs import router as logs_router
@@ -90,7 +91,7 @@ app.include_router(ws_status_router)
 
 @app.get("/api/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "version": __version__}
 
 
 @app.get("/")
@@ -107,7 +108,9 @@ async def dashboard(request: Request):
 async def settings_page(request: Request):
     settings = request.app.state.settings_store.load()
     return templates.TemplateResponse(
-        request, "settings.html", {"settings": settings, "data_dir": str(DATA_DIR)}
+        request,
+        "settings.html",
+        {"settings": settings, "data_dir": str(DATA_DIR), "app_version": __version__},
     )
 
 
