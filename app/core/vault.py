@@ -18,6 +18,10 @@ from app.core import dpapi
 
 _ENTROPY = b"codec-control-center"
 
+SCHEMA_VERSION = 1
+"""credentials.enc.json 저장 형식 버전. 구조 변경 시 올리고,
+_migrate()에 "if version < N: ..." 형태로 단계별 변환을 추가한다."""
+
 
 class CredentialVault:
     def __init__(self, store_path: Path) -> None:
@@ -52,7 +56,26 @@ class CredentialVault:
     def _read_store(self) -> dict[str, str]:
         if not self.store_path.exists():
             return {}
-        return json.loads(self.store_path.read_text(encoding="utf-8"))
+        payload = _migrate(json.loads(self.store_path.read_text(encoding="utf-8")))
+        return payload["credentials"]
 
     def _write_store(self, data: dict[str, str]) -> None:
-        self.store_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        payload = {"schema_version": SCHEMA_VERSION, "credentials": data}
+        self.store_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _migrate(payload: dict) -> dict:
+    """구버전 credentials.enc.json을 현재 스키마로 변환한다.
+
+    schema_version 필드가 없는 파일은 1.0.0 이전의 평면 구조({credential_ref: blob, ...})다 —
+    credentials 키로 감싸서 승격한다.
+    """
+    if "schema_version" not in payload:
+        return {"schema_version": SCHEMA_VERSION, "credentials": payload}
+    version = payload["schema_version"]
+    if version > SCHEMA_VERSION:
+        raise ValueError(
+            f"credentials.enc.json schema_version={version}이 현재 앱이 지원하는 "
+            f"최대 버전({SCHEMA_VERSION})보다 높습니다 — 더 최신 버전의 앱으로 실행해주세요."
+        )
+    return payload

@@ -1,6 +1,8 @@
+import json
+
 import pytest
 
-from app.core.settings import AppSettings, SettingsStore
+from app.core.settings import AppSettings, SCHEMA_VERSION, SettingsStore, _migrate
 
 
 def test_defaults():
@@ -50,3 +52,26 @@ def test_load_fills_missing_fields_with_defaults(tmp_path):
 def test_out_of_range_values_rejected(kwargs):
     with pytest.raises(ValueError):
         AppSettings(**kwargs)
+
+
+def test_save_includes_schema_version(tmp_path):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings())
+    assert json.loads(path.read_text(encoding="utf-8"))["schema_version"] == SCHEMA_VERSION
+
+
+def test_migrate_missing_schema_version_defaults_to_1():
+    data = {"poll_interval": 20.0}
+    assert _migrate(data) == data
+
+
+def test_migrate_future_version_raises():
+    with pytest.raises(ValueError):
+        _migrate({"schema_version": SCHEMA_VERSION + 1})
+
+
+def test_load_legacy_file_without_schema_version(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"poll_interval": 25.0}), encoding="utf-8")
+    settings = SettingsStore(path).load()
+    assert settings.poll_interval == 25.0

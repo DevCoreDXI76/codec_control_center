@@ -18,6 +18,10 @@ from app.models.device import Device
 
 _ENTROPY = b"codec-control-center-registry"
 
+SCHEMA_VERSION = 1
+"""devices.enc.json 저장 형식 버전. 필드 추가/구조 변경 시 올리고,
+_migrate()에 "if version < N: ..." 형태로 단계별 변환을 추가한다."""
+
 
 class DeviceRegistry:
     def __init__(self, store_path: Path) -> None:
@@ -82,12 +86,28 @@ class DeviceRegistry:
         if not raw:
             return []
         decrypted = dpapi.unprotect(raw, _ENTROPY)
-        payload = json.loads(decrypted.decode("utf-8"))
+        payload = _migrate(json.loads(decrypted.decode("utf-8")))
         return [Device(**item) for item in payload.get("devices", [])]
 
     def _write(self, devices: list[Device]) -> None:
         payload = json.dumps(
-            {"devices": [dataclasses.asdict(d) for d in devices]}, ensure_ascii=False
+            {"schema_version": SCHEMA_VERSION, "devices": [dataclasses.asdict(d) for d in devices]},
+            ensure_ascii=False,
         ).encode("utf-8")
         encrypted = dpapi.protect(payload, _ENTROPY)
         self.store_path.write_bytes(encrypted)
+
+
+def _migrate(payload: dict) -> dict:
+    """구버전 devices.enc.json을 현재 스키마로 변환한다.
+
+    schema_version 필드가 없는 파일(1.0.0 이전, 이 필드가 생기기 전)은 1로 간주한다.
+    """
+    version = payload.get("schema_version", 1)
+    if version > SCHEMA_VERSION:
+        raise ValueError(
+            f"devices.enc.json schema_version={version}이 현재 앱이 지원하는 "
+            f"최대 버전({SCHEMA_VERSION})보다 높습니다 — 더 최신 버전의 앱으로 실행해주세요."
+        )
+    # version == 1은 현재 스키마와 동일. 향후 스키마가 바뀌면 여기에 단계별 변환을 추가한다.
+    return payload

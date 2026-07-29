@@ -1,6 +1,9 @@
+import json
+
 import pytest
 
-from app.core.registry import DeviceRegistry
+from app.core import dpapi
+from app.core.registry import DeviceRegistry, SCHEMA_VERSION, _ENTROPY, _migrate
 
 
 @pytest.fixture
@@ -94,3 +97,26 @@ def test_persists_across_registry_instances(tmp_path):
     fetched = reopened.get_device(device.id)
     assert fetched is not None
     assert fetched.name == "영속성 테스트"
+
+
+def test_write_includes_schema_version(registry, tmp_path):
+    _add_sample(registry)
+    raw = dpapi.unprotect((tmp_path / "devices.enc.json").read_bytes(), _ENTROPY)
+    assert json.loads(raw)["schema_version"] == SCHEMA_VERSION
+
+
+def test_migrate_missing_schema_version_defaults_to_1():
+    payload = {"devices": [{"id": "x"}]}
+    assert _migrate(payload) == payload
+
+
+def test_migrate_future_version_raises():
+    with pytest.raises(ValueError):
+        _migrate({"schema_version": SCHEMA_VERSION + 1, "devices": []})
+
+
+def test_reads_legacy_file_without_schema_version(tmp_path):
+    path = tmp_path / "devices.enc.json"
+    legacy = json.dumps({"devices": []}, ensure_ascii=False).encode("utf-8")
+    path.write_bytes(dpapi.protect(legacy, _ENTROPY))
+    assert DeviceRegistry(path).list_devices() == []

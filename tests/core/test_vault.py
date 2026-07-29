@@ -1,6 +1,8 @@
+import json
+
 import pytest
 
-from app.core.vault import CredentialVault
+from app.core.vault import CredentialVault, SCHEMA_VERSION, _migrate
 
 
 @pytest.fixture
@@ -48,3 +50,29 @@ def test_store_persists_across_vault_instances(tmp_path):
     ref = CredentialVault(path).store("persisted-secret")
     reopened = CredentialVault(path)
     assert reopened.load(ref) == "persisted-secret"
+
+
+def test_write_includes_schema_version(vault, tmp_path):
+    vault.store("x")
+    raw = json.loads((tmp_path / "credentials.enc.json").read_text(encoding="utf-8"))
+    assert raw["schema_version"] == SCHEMA_VERSION
+    assert "credentials" in raw
+
+
+def test_migrate_wraps_legacy_flat_format():
+    legacy = {"ref-1": "blob-1"}
+    migrated = _migrate(legacy)
+    assert migrated == {"schema_version": SCHEMA_VERSION, "credentials": {"ref-1": "blob-1"}}
+
+
+def test_migrate_future_version_raises():
+    with pytest.raises(ValueError):
+        _migrate({"schema_version": SCHEMA_VERSION + 1, "credentials": {}})
+
+
+def test_reads_legacy_flat_format_file(tmp_path):
+    path = tmp_path / "credentials.enc.json"
+    path.write_text(json.dumps({"ref-legacy": "blob-legacy"}), encoding="utf-8")
+    vault = CredentialVault(path)
+    data = vault._read_store()
+    assert data == {"ref-legacy": "blob-legacy"}

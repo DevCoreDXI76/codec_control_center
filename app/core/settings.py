@@ -17,6 +17,10 @@ _DEFAULTS = {
     "open_browser_on_start": True,
 }
 
+SCHEMA_VERSION = 1
+"""settings.json 저장 형식 버전. 필드 추가/구조 변경 시 올리고,
+_migrate()에 "if version < N: ..." 형태로 단계별 변환을 추가한다."""
+
 
 @dataclass
 class AppSettings:
@@ -42,10 +46,26 @@ class SettingsStore:
     def load(self) -> AppSettings:
         if not self.store_path.exists():
             return AppSettings()
-        data = json.loads(self.store_path.read_text(encoding="utf-8"))
+        data = _migrate(json.loads(self.store_path.read_text(encoding="utf-8")))
+        data.pop("schema_version", None)
         return AppSettings(**{**_DEFAULTS, **data})
 
     def save(self, settings: AppSettings) -> None:
+        payload = {"schema_version": SCHEMA_VERSION, **asdict(settings)}
         self.store_path.write_text(
-            json.dumps(asdict(settings), ensure_ascii=False, indent=2), encoding="utf-8"
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+
+
+def _migrate(data: dict) -> dict:
+    """구버전 settings.json을 현재 스키마로 변환한다.
+
+    schema_version 필드가 없는 파일(1.0.0 이전, 이 필드가 생기기 전)은 1로 간주한다.
+    """
+    version = data.get("schema_version", 1)
+    if version > SCHEMA_VERSION:
+        raise ValueError(
+            f"settings.json schema_version={version}이 현재 앱이 지원하는 "
+            f"최대 버전({SCHEMA_VERSION})보다 높습니다 — 더 최신 버전의 앱으로 실행해주세요."
+        )
+    return data

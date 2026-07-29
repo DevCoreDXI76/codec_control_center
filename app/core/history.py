@@ -8,6 +8,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+SCHEMA_VERSION = 1
+"""history.sqlite3 테이블 구조 버전. SQLite 내장 PRAGMA user_version에 저장한다.
+구조 변경 시 올리고, _init_schema()에 "if current < N: ALTER TABLE ..." 형태로
+단계별 마이그레이션을 추가한다."""
+
+
 @dataclass
 class LogEntry:
     id: int
@@ -45,6 +51,17 @@ class ControlHistory:
                 )
                 """
             )
+            current = conn.execute("PRAGMA user_version").fetchone()[0]
+            if current == 0:
+                # 방금 새로 만든 DB — 현재 스키마 버전으로 표시.
+                conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+            elif current > SCHEMA_VERSION:
+                raise ValueError(
+                    f"history.sqlite3 schema_version={current}이 현재 앱이 지원하는 "
+                    f"최대 버전({SCHEMA_VERSION})보다 높습니다 — 더 최신 버전의 앱으로 실행해주세요."
+                )
+            # 0 < current < SCHEMA_VERSION인 구버전 DB는 여기서 ALTER TABLE 등으로 승격시키고
+            # 마지막에 PRAGMA user_version = SCHEMA_VERSION으로 갱신한다 (아직 해당 사항 없음).
 
     def log(
         self,

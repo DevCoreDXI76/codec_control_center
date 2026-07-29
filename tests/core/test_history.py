@@ -1,6 +1,8 @@
+import sqlite3
+
 import pytest
 
-from app.core.history import ControlHistory
+from app.core.history import ControlHistory, SCHEMA_VERSION
 
 
 @pytest.fixture
@@ -57,3 +59,20 @@ def test_persists_across_instances(tmp_path):
     ControlHistory(path).log(device_id="dev-1", device_name="x", action="mute", success=True)
     reopened = ControlHistory(path)
     assert len(reopened.list_recent()) == 1
+
+
+def test_fresh_db_gets_current_schema_version(tmp_path):
+    path = tmp_path / "history.sqlite3"
+    ControlHistory(path)
+    conn = sqlite3.connect(path)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+    conn.close()
+
+
+def test_future_schema_version_raises(tmp_path):
+    path = tmp_path / "history.sqlite3"
+    conn = sqlite3.connect(path)
+    conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION + 1}")
+    conn.close()
+    with pytest.raises(ValueError):
+        ControlHistory(path)
