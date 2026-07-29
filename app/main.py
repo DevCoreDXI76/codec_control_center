@@ -62,8 +62,7 @@ async def health() -> dict[str, str]:
 async def dashboard(request: Request):
     registry = request.app.state.registry
     scheduler = request.app.state.scheduler
-    devices = [
-        {"device": device, "status": scheduler.get_status(device.id)}
-        for device in registry.list_devices()
-    ]
-    return templates.TemplateResponse(request, "index.html", {"devices": devices})
+    device_list = registry.list_devices()
+    devices = [{"device": device, "status": scheduler.get_status(device.id)} for device in device_list]
+    groups = sorted({device.group for device in device_list if device.group})
+    return templates.TemplateResponse(request, "index.html", {"devices": devices, "groups": groups})

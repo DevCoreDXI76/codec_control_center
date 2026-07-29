@@ -46,3 +46,34 @@ def test_dashboard_renders_device_card(tmp_path):
     assert "SIM" in resp.text
     assert 'id="meetings-list"' in resp.text
     assert "오늘의 예정 회의" in resp.text
+    assert 'id="group-tabs"' in resp.text
+    assert 'data-group="3F"' in resp.text
+    assert '>3F<' in resp.text
+    assert 'id="alert-banner"' in resp.text
+    assert "display:none" in resp.text  # 오프라인 없으니 배너는 숨김 상태로 렌더
+
+
+def test_dashboard_shows_alert_banner_when_offline(tmp_path):
+    import asyncio
+
+    from app.core.driver_base import DeviceStatus
+
+    client = _client(tmp_path)
+    credential_ref = app.state.vault.store(json.dumps({"username": "admin", "password": "pw"}))
+    device = app.state.registry.add_device(
+        name="오프라인 장비",
+        vendor="poly",
+        connection_type="telnet",
+        host="127.0.0.1",
+        port=1,
+        group="3F",
+        credential_ref=credential_ref,
+        is_simulated=True,
+    )
+    asyncio.run(app.state.scheduler.add_device(device.id))
+    app.state.scheduler._runtimes[device.id].last_status = DeviceStatus(
+        online=False, in_call=False, muted=False, call_peer=None, last_polled_at="now", error="offline"
+    )
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert "응답 없는 장비 1개" in resp.text

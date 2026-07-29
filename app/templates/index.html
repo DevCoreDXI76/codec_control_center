@@ -22,12 +22,32 @@
     </nav>
 
     <main class="main">
+      {% set offline_count = devices|rejectattr('status')|list|length + devices|selectattr('status')|rejectattr('status.online')|list|length %}
+      <div id="alert-banner" class="alert-banner" style="{{ '' if offline_count > 0 else 'display:none' }}">
+        ⚠ <span id="alert-text">응답 없는 장비 {{ offline_count }}개</span>
+      </div>
+
       <div class="stat-bar">
         <span>전체 <strong data-stat="total">{{ devices|length }}</strong></span>
         <span>온라인 <strong data-stat="online">{{ devices|selectattr('status')|selectattr('status.online')|list|length }}</strong></span>
-        <span>오프라인 <strong data-stat="offline">{{ devices|rejectattr('status')|list|length + devices|selectattr('status')|rejectattr('status.online')|list|length }}</strong></span>
+        <span>오프라인 <strong data-stat="offline">{{ offline_count }}</strong></span>
         <span>통화중 <strong data-stat="call">{{ devices|selectattr('status')|selectattr('status.in_call')|list|length }}</strong></span>
       </div>
+
+      {% if groups %}
+      <div class="group-tabs" id="group-tabs">
+        <button class="tab active" data-group="__all__" onclick="filterGroup('__all__', this)">전체</button>
+        {% for g in groups %}
+        <button class="tab" data-group="{{ g }}" onclick="filterGroup('{{ g }}', this)">{{ g }}</button>
+        {% endfor %}
+      </div>
+      <div class="group-bulk-actions" id="group-bulk-actions" style="display:none">
+        <span id="group-bulk-label" class="meta"></span>
+        <button class="btn" onclick="bulkMute(true)">그룹 전체 Mute</button>
+        <button class="btn" onclick="bulkMute(false)">그룹 전체 Unmute</button>
+        <button class="btn btn-danger" onclick="bulkReboot()">그룹 전체 재부팅</button>
+      </div>
+      {% endif %}
 
       {% if devices %}
       <div class="meetings-widget">
@@ -105,6 +125,7 @@
         <div
           class="device-card {% if s %}{% if not s.online %}status-offline{% elif s.in_call %}status-call{% else %}status-online{% endif %}{% else %}status-offline{% endif %} {% if d.is_simulated %}status-sim{% endif %}"
           data-device-id="{{ d.id }}"
+          data-group="{{ d.group }}"
           data-online="{{ '1' if s and s.online else '0' }}"
           data-in-call="{{ '1' if s and s.in_call else '0' }}"
         >

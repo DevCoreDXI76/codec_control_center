@@ -65,6 +65,63 @@ function updateStatBar() {
   set("online", online);
   set("offline", offline);
   set("call", inCall);
+
+  const banner = document.getElementById("alert-banner");
+  const alertText = document.getElementById("alert-text");
+  if (banner && alertText) {
+    if (offline > 0) {
+      alertText.textContent = `응답 없는 장비 ${offline}개`;
+      banner.style.display = "";
+    } else {
+      banner.style.display = "none";
+    }
+  }
+}
+
+let currentGroup = "__all__";
+
+function filterGroup(group, btn) {
+  currentGroup = group;
+  document.querySelectorAll("#group-tabs .tab").forEach((t) => t.classList.remove("active"));
+  btn.classList.add("active");
+
+  document.querySelectorAll(".device-card").forEach((card) => {
+    const match = group === "__all__" || card.dataset.group === group;
+    card.style.display = match ? "" : "none";
+  });
+
+  const bulkBar = document.getElementById("group-bulk-actions");
+  const label = document.getElementById("group-bulk-label");
+  if (!bulkBar || !label) return;
+  if (group === "__all__") {
+    bulkBar.style.display = "none";
+  } else {
+    bulkBar.style.display = "flex";
+    label.textContent = `"${group}" 그룹 일괄 제어:`;
+  }
+}
+
+function visibleDeviceIdsInGroup() {
+  return Array.from(document.querySelectorAll(".device-card"))
+    .filter((card) => currentGroup === "__all__" || card.dataset.group === currentGroup)
+    .map((card) => card.dataset.deviceId);
+}
+
+async function bulkMute(on) {
+  const ids = visibleDeviceIdsInGroup();
+  if (ids.length === 0) return;
+  if (!confirm(`"${currentGroup}" 그룹 ${ids.length}대를 ${on ? "음소거" : "음소거 해제"}하시겠습니까?`)) return;
+  await Promise.all(ids.map((id) => callControl(id, "mute", { on })));
+  await Promise.all(ids.map((id) => refreshStatus(id)));
+  showToast(`${ids.length}대 ${on ? "음소거" : "음소거 해제"} 완료`);
+}
+
+async function bulkReboot() {
+  const ids = visibleDeviceIdsInGroup();
+  if (ids.length === 0) return;
+  if (!confirm(`"${currentGroup}" 그룹 ${ids.length}대를 전부 재부팅하시겠습니까?\n일시적으로 응답하지 않게 됩니다.`)) return;
+  await Promise.all(ids.map((id) => callControl(id, "reboot")));
+  showToast(`${ids.length}대 재부팅 명령 전송됨`);
 }
 
 async function callControl(deviceId, action, body) {
