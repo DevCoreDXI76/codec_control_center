@@ -202,6 +202,20 @@ async def test_add_device_while_running_spawns_polling_task(registry):
         await scheduler.stop()
 
 
+async def test_add_device_while_running_does_not_poll_immediately(registry):
+    """등록 직후 바로 접속을 시도하지 않고 한 폴링 주기(interval)를 기다린 뒤 첫 폴링을 한다
+    (Phase③ 실장비 검증: 준비 안 된 장비를 등록하자마자 오류로 표시되는 문제 방지)."""
+    scheduler = PollingScheduler(driver_factory=registry.factory, base_interval=1.0)
+    await scheduler.start()
+    try:
+        await scheduler.add_device("dev-late")
+        await asyncio.sleep(0.05)
+        assert "dev-late" not in registry.created
+        assert scheduler.get_status("dev-late") is None
+    finally:
+        await scheduler.stop()
+
+
 async def test_get_driver_reuses_same_session(registry):
     scheduler = PollingScheduler(driver_factory=registry.factory, base_interval=15.0)
     await scheduler.add_device("dev-1")

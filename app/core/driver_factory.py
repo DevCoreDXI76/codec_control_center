@@ -34,8 +34,15 @@ def build_driver_factory(
         timeout = get_timeout()
 
         if device.vendor == "poly":
-            # PolyDriver(telnetlib3)는 현재 인증 절차를 구현하지 않는다 (Phase① 시뮬레이터 기준).
-            return PolyDriver(host=device.host, port=device.port, timeout=timeout)
+            # connection_type="ssh"면 paramiko(ID/PW 인증), "telnet"이면 telnetlib3(무인증)로 접속한다.
+            return PolyDriver(
+                host=device.host,
+                port=device.port,
+                timeout=timeout,
+                transport=device.connection_type,
+                username=username,
+                password=password,
+            )
         if device.vendor == "cisco":
             return CiscoDriver(
                 host=device.host, port=device.port, username=username, password=password, timeout=timeout

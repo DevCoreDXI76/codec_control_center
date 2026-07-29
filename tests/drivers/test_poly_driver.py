@@ -1,8 +1,11 @@
+import asyncio
+
+import pytest
 import pytest_asyncio
 
 from app.core.driver_base import CalendarEntry
 from app.drivers.poly.poly_driver import PolyDriver
-from app.simulator.poly_sim_server import PolySimServer
+from app.simulator.poly_sim_server import PolySimServer, PolySSHSimServer
 
 
 @pytest_asyncio.fixture
@@ -18,6 +21,22 @@ async def sim_and_driver():
     finally:
         await driver.disconnect()
         await sim.stop()
+
+
+@pytest_asyncio.fixture
+async def ssh_sim_and_driver():
+    sim = PolySSHSimServer(host="127.0.0.1", port=0)
+    await asyncio.to_thread(sim.start)
+
+    driver = PolyDriver(
+        host="127.0.0.1", port=sim.port, timeout=3.0, transport="ssh", username="admin", password="pw"
+    )
+    await driver.connect()
+    try:
+        yield sim, driver
+    finally:
+        await driver.disconnect()
+        await asyncio.to_thread(sim.stop)
 
 
 async def test_get_status_idle(sim_and_driver):
@@ -100,6 +119,39 @@ async def test_full_lifecycle_no_exceptions(sim_and_driver):
     await driver.get_status()
     await driver.mute(True)
     await driver.mute(False)
+    await driver.dial("1234")
+    await driver.hangup()
+    await driver.reboot()
+
+
+def test_invalid_transport_raises_valueerror():
+    with pytest.raises(ValueError):
+        PolyDriver(host="127.0.0.1", transport="http")
+
+
+# --- SSH 트랜스포트 (Phase③ 실장비 검증: connection_type="ssh" 장비 대응) ---
+# 동일 명령 세트를 SSH로 접속해도 동작함을 확인 — 위 Telnet 테스트와 대칭.
+
+
+async def test_ssh_get_status_idle(ssh_sim_and_driver):
+    _sim, driver = ssh_sim_and_driver
+    status = await driver.get_status()
+    assert status.online is True
+    assert status.error is None
+
+
+async def test_ssh_mute_unmute_reflected_in_status(ssh_sim_and_driver):
+    sim, driver = ssh_sim_and_driver
+    assert await driver.mute(True) is True
+    assert sim.state.muted is True
+    status = await driver.get_status()
+    assert status.muted is True
+
+
+async def test_ssh_full_lifecycle_no_exceptions(ssh_sim_and_driver):
+    _sim, driver = ssh_sim_and_driver
+    await driver.get_status()
+    await driver.mute(True)
     await driver.dial("1234")
     await driver.hangup()
     await driver.reboot()

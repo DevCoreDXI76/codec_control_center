@@ -25,6 +25,27 @@ def test_resolve_paths_dev_mode():
     assert data_dir.parent == app_dir.parent  # 프로젝트 루트/data
 
 
+def test_configure_logging_writes_to_file(tmp_path):
+    import logging
+
+    from app.main import _configure_logging
+
+    log_path = tmp_path / "app.log"
+    _configure_logging(log_path)
+    try:
+        logging.getLogger("app.core.polling").warning("test message %s", "hello")
+        for handler in logging.getLogger().handlers:
+            handler.flush()
+        assert log_path.exists()
+        assert "test message hello" in log_path.read_text(encoding="utf-8")
+    finally:
+        root_logger = logging.getLogger()
+        for handler in list(root_logger.handlers):
+            if getattr(handler, "baseFilename", None) == str(log_path):
+                root_logger.removeHandler(handler)
+                handler.close()
+
+
 def test_resolve_paths_frozen_mode(monkeypatch, tmp_path):
     from app.main import _resolve_paths
 

@@ -5,7 +5,19 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-29
+
+Phase③ 실장비(VDI) 검증 1차 피드백 반영.
+
+### Fixed
+- Poly 장비를 `connection_type="ssh"`로 등록하면 `driver_factory`가 이를 무시하고 항상 Telnet(telnetlib3)으로 접속을 시도해 `connection closed by device` 오류가 발생하던 문제. `PolyDriver`에 SSH 트랜스포트(paramiko)를 추가하고 `connection_type`에 따라 선택하도록 수정.
+- 사이드바의 "장비관리"/"Teams" 메뉴가 만들어진 적 없는 죽은 링크(`href="#"`)였던 문제 — 각각 대시보드의 "+장비 등록" 모달과 "오늘의 예정 회의" 위젯으로 이미 대체 구현되어 있어 링크 제거.
+
+### Changed
+- 장비를 새로 등록하면 곧바로 접속을 시도하지 않고 한 폴링 주기가 지난 뒤 첫 폴링을 수행하도록 변경 — 등록 직후 아직 준비되지 않은 장비가 즉시 오류로 표시되는 것을 방지.
+
 ### Added
+- `data/app.log`에 폴링/드라이버 접속 오류를 파일로 기록 (RotatingFileHandler, 5MB x 3).
 - 영속 저장 파일(`devices.enc.json`, `settings.json`, `credentials.enc.json`, `history.sqlite3`)에 데이터 스키마 버전 관리 도입.
 
 ## [1.0.0] - 2026-07-29

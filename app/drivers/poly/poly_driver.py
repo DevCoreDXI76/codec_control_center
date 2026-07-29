@@ -1,20 +1,26 @@
 # app/drivers/poly/poly_driver.py
 """
-Poly (Polycom RealPresence Group Series) Telnet API 드라이버.
+Poly (Polycom RealPresence Group Series) API 드라이버 — Telnet 또는 SSH.
 
-poly_commands.py에서 문서 대조로 확정한 명령만 사용한다.
+Integrator Reference Guide 기준으로 API 명령 자체는 Telnet/SSH/RS-232 접속
+방식과 무관하게 동일하다 (poly_commands.py에서 문서 대조로 확정한 명령만 사용).
+Telnet은 telnetlib3(비동기 네이티브)를, SSH는 paramiko(동기)를
+CiscoDriver와 동일하게 asyncio.to_thread로 감싸 사용한다.
 """
 from __future__ import annotations
 
 import asyncio
+import socket
 from datetime import datetime, timezone
 
+import paramiko
 import telnetlib3
 
 from app.core.driver_base import (
     CalendarEntry,
     DeviceDriver,
     DeviceStatus,
+    DriverAuthError,
     DriverCommandError,
     DriverConnectionError,
     DriverError,
@@ -24,14 +30,33 @@ from . import poly_commands as cmd
 
 
 class PolyDriver(DeviceDriver):
-    def __init__(self, host: str, port: int = 2323, timeout: float = 7.0) -> None:
+    def __init__(
+        self,
+        host: str,
+        port: int = 2323,
+        timeout: float = 7.0,
+        transport: str = "telnet",
+        username: str = "",
+        password: str = "",
+    ) -> None:
+        if transport not in ("telnet", "ssh"):
+            raise ValueError(f"invalid transport: {transport!r} (expected 'telnet' or 'ssh')")
         self.host = host
         self.port = port
         self.timeout = timeout
+        self.transport = transport
+        self.username = username
+        self.password = password
         self._reader = None
         self._writer = None
+        self._ssh_client: paramiko.SSHClient | None = None
+        self._ssh_channel = None
+        self._ssh_buffer = b""
 
     async def connect(self) -> None:
+        if self.transport == "ssh":
+            await asyncio.to_thread(self._connect_ssh_sync)
+            return
         try:
             self._reader, self._writer = await asyncio.wait_for(
                 telnetlib3.open_connection(self.host, self.port), timeout=self.timeout
@@ -41,15 +66,77 @@ class PolyDriver(DeviceDriver):
         except OSError as exc:
             raise DriverConnectionError(str(exc)) from exc
 
+    def _connect_ssh_sync(self) -> None:
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            client.connect(
+                self.host,
+                port=self.port,
+                username=self.username,
+                password=self.password,
+                timeout=self.timeout,
+                look_for_keys=False,
+                allow_agent=False,
+            )
+        except paramiko.AuthenticationException as exc:
+            raise DriverAuthError(str(exc)) from exc
+        except (paramiko.SSHException, OSError) as exc:
+            raise DriverConnectionError(str(exc)) from exc
+
+        channel = client.invoke_shell()
+        channel.settimeout(self.timeout)
+        self._ssh_client = client
+        self._ssh_channel = channel
+        self._ssh_buffer = b""
+
     async def disconnect(self) -> None:
+        if self.transport == "ssh":
+            await asyncio.to_thread(self._disconnect_ssh_sync)
+            return
         if self._writer is not None:
             self._writer.close()
         self._reader = None
         self._writer = None
 
+    def _disconnect_ssh_sync(self) -> None:
+        if self._ssh_channel is not None:
+            try:
+                self._ssh_channel.close()
+            except (paramiko.SSHException, OSError, EOFError):
+                pass
+        if self._ssh_client is not None:
+            try:
+                self._ssh_client.close()
+            except (paramiko.SSHException, OSError, EOFError):
+                pass
+        self._ssh_channel = None
+        self._ssh_client = None
+
     # --- 내부 통신 헬퍼 ---
 
+    async def _send(self, command: str) -> None:
+        if self.transport == "ssh":
+            await asyncio.to_thread(self._send_ssh_sync, command)
+            return
+        if self._writer is None:
+            raise DriverConnectionError("not connected")
+        try:
+            self._writer.write(command + "\r\n")
+        except OSError as exc:
+            raise DriverConnectionError(str(exc)) from exc
+
+    def _send_ssh_sync(self, command: str) -> None:
+        if self._ssh_channel is None:
+            raise DriverConnectionError("not connected")
+        try:
+            self._ssh_channel.send(command + "\r\n")
+        except OSError as exc:
+            raise DriverConnectionError(str(exc)) from exc
+
     async def _read_line(self) -> str:
+        if self.transport == "ssh":
+            return await asyncio.to_thread(self._read_line_ssh_sync)
         if self._reader is None:
             raise DriverConnectionError("not connected")
         try:
@@ -60,13 +147,24 @@ class PolyDriver(DeviceDriver):
             raise DriverConnectionError("connection closed by device")
         return line.strip()
 
-    async def _call(self, command: str) -> str:
-        if self._writer is None:
+    def _read_line_ssh_sync(self) -> str:
+        if self._ssh_channel is None:
             raise DriverConnectionError("not connected")
-        try:
-            self._writer.write(command + "\r\n")
-        except OSError as exc:
-            raise DriverConnectionError(str(exc)) from exc
+        while b"\n" not in self._ssh_buffer:
+            try:
+                data = self._ssh_channel.recv(4096)
+            except socket.timeout as exc:
+                raise DriverTimeoutError("timeout waiting for device response") from exc
+            except OSError as exc:
+                raise DriverConnectionError(str(exc)) from exc
+            if not data:
+                raise DriverConnectionError("connection closed by device")
+            self._ssh_buffer += data
+        line, self._ssh_buffer = self._ssh_buffer.split(b"\n", 1)
+        return line.decode("utf-8", errors="replace").strip()
+
+    async def _call(self, command: str) -> str:
+        await self._send(command)
         return await self._read_line()
 
     async def _call_block(self, command: str, begin: str, end: str) -> list[str]:
@@ -131,12 +229,7 @@ class PolyDriver(DeviceDriver):
 
     async def reboot(self) -> bool:
         # 문서: "reboot now"는 확인 없이 재시작하며 별도 피드백을 반환하지 않는다.
-        if self._writer is None:
-            raise DriverConnectionError("not connected")
-        try:
-            self._writer.write(cmd.REBOOT_NOW + "\r\n")
-        except OSError as exc:
-            raise DriverConnectionError(str(exc)) from exc
+        await self._send(cmd.REBOOT_NOW)
         return True
 
     async def get_calendar_status(self) -> str:

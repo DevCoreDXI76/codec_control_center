@@ -59,21 +59,18 @@ class PollingScheduler:
         self.max_concurrency = max_concurrency
         self._semaphore = asyncio.Semaphore(max_concurrency)
 
-    async def add_device(self, device_id: str, interval: float | None = None) -> DeviceStatus | None:
+    async def add_device(self, device_id: str, interval: float | None = None) -> None:
         """장비를 스케줄러에 등록한다.
 
-        이미 폴링 중(running)이면 등록과 동시에 1회 즉시 폴링을 수행해 반환한다.
-        (그래야 장비 등록 API 응답 시점에 최신 상태를 바로 알 수 있다 — 등록 직후
-        화면이 몇 초간 "오프라인/미확인"으로 보이는 문제를 막는다.)
+        이미 폴링 중(running)이면 등록 즉시 접속을 시도하지 않고, 한 폴링 주기가
+        지난 뒤 첫 폴링을 수행한다 — 등록 직후 아직 준비되지 않은 장비(예: SSH
+        설정이 안 끝난 실장비)에 곧바로 접속을 시도해 오류로 표시되는 것을 피하기
+        위함 (Phase③ 실장비 검증에서 확인된 문제).
         """
         runtime = _DeviceRuntime(interval=interval or self.base_interval)
         self._runtimes[device_id] = runtime
-        if not self._running:
-            return None
-        async with self._semaphore:
-            status = await self._poll_device(device_id, runtime)
-        runtime.task = asyncio.create_task(self._poll_loop(device_id, skip_first_poll=True))
-        return status
+        if self._running:
+            runtime.task = asyncio.create_task(self._poll_loop(device_id, delay_first_poll=True))
 
     def remove_device(self, device_id: str) -> None:
         runtime = self._runtimes.pop(device_id, None)
@@ -139,14 +136,13 @@ class PollingScheduler:
         async with self._semaphore:
             return await self._poll_device(device_id, runtime)
 
-    async def _poll_loop(self, device_id: str, skip_first_poll: bool = False) -> None:
+    async def _poll_loop(self, device_id: str, delay_first_poll: bool = False) -> None:
         runtime = self._runtimes[device_id]
-        first = True
+        if delay_first_poll:
+            await asyncio.sleep(runtime.interval)
         while self._running:
-            if not (first and skip_first_poll):
-                async with self._semaphore:
-                    await self._poll_device(device_id, runtime)
-            first = False
+            async with self._semaphore:
+                await self._poll_device(device_id, runtime)
             await asyncio.sleep(runtime.interval)
 
     async def _poll_device(self, device_id: str, runtime: _DeviceRuntime) -> DeviceStatus:
@@ -156,6 +152,7 @@ class PollingScheduler:
                 await runtime.driver.connect()
             status = await runtime.driver.get_status()
         except DriverError as exc:
+            logger.warning("device %s poll failed: %s", device_id, exc)
             status = DeviceStatus(
                 online=False,
                 in_call=False,

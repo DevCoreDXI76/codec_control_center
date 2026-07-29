@@ -32,6 +32,20 @@ def test_builds_poly_driver(registry, vault):
     assert driver.port == 2323
 
 
+def test_builds_poly_driver_with_ssh_transport_and_credentials(registry, vault):
+    credential_ref = vault.store(json.dumps({"username": "admin", "password": "s3cret"}))
+    device = registry.add_device(
+        name="poly room (ssh)", vendor="poly", connection_type="ssh",
+        host="10.0.0.5", port=22, group="6F", credential_ref=credential_ref, is_simulated=False,
+    )
+    factory = build_driver_factory(registry, vault)
+    driver = factory(device.id)
+    assert isinstance(driver, PolyDriver)
+    assert driver.transport == "ssh"
+    assert driver.username == "admin"
+    assert driver.password == "s3cret"
+
+
 def test_builds_cisco_driver_with_credentials(registry, vault):
     credential_ref = vault.store(json.dumps({"username": "admin", "password": "s3cret"}))
     device = registry.add_device(

@@ -2,9 +2,11 @@
 """FastAPI 진입점 (SPEC.md 1절/2절). 로컬 웹 대시보드 서버."""
 from __future__ import annotations
 
+import logging
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -47,7 +49,25 @@ def _resolve_paths() -> tuple[Path, Path, Path, Path]:
     return app_dir, app_dir / "templates", app_dir / "static", exe_dir / "data"
 
 
+def _configure_logging(log_path: Path) -> None:
+    """폴링/드라이버 접속 오류를 파일로 남긴다.
+
+    UI 카드에는 최신 오류 메시지 한 줄만 보이고 지나간 이력은 사라지므로,
+    실장비 검증(Phase③) 중 재현이 어려운 접속 문제를 나중에 분석할 수 있도록
+    data/app.log에 누적 기록한다.
+    """
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    root_logger = logging.getLogger()
+    if any(isinstance(h, RotatingFileHandler) and h.baseFilename == str(log_path) for h in root_logger.handlers):
+        return  # 모듈이 이미 로드되어 핸들러가 설정된 경우 중복 등록 방지
+    handler = RotatingFileHandler(log_path, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    root_logger.addHandler(handler)
+    root_logger.setLevel(logging.INFO)
+
+
 APP_DIR, TEMPLATES_DIR, STATIC_DIR, DATA_DIR = _resolve_paths()
+_configure_logging(DATA_DIR / "app.log")
 
 
 @asynccontextmanager
