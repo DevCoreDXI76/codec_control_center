@@ -44,13 +44,17 @@ class PollingScheduler:
         max_interval: float = 120.0,
         max_concurrency: int = 8,
         on_status: StatusCallback | None = None,
+        get_device_label: Callable[[str], str] | None = None,
     ) -> None:
+        """get_device_label은 로그에 device_id 대신 사람이 알아볼 수 있는 이름을
+        남기기 위한 조회 함수다 (미지정 시 device_id를 그대로 쓴다)."""
         self._driver_factory = driver_factory
         self.base_interval = base_interval
         self.max_interval = max_interval
         self.max_concurrency = max_concurrency
         self._semaphore = asyncio.Semaphore(max_concurrency)
         self._on_status = on_status
+        self._get_device_label = get_device_label or (lambda device_id: device_id)
         self._runtimes: dict[str, _DeviceRuntime] = {}
         self._running = False
 
@@ -152,7 +156,7 @@ class PollingScheduler:
                 await runtime.driver.connect()
             status = await runtime.driver.get_status()
         except DriverError as exc:
-            logger.warning("device %s poll failed: %s", device_id, exc)
+            logger.warning("device %s poll failed: %s", self._get_device_label(device_id), exc)
             status = DeviceStatus(
                 online=False,
                 in_call=False,
@@ -162,6 +166,23 @@ class PollingScheduler:
                 error=str(exc),
             )
             runtime.driver = None  # 다음 폴링에서 재연결 시도 (세션이 끊겼을 가능성)
+        except Exception as exc:
+            # DriverError가 아닌 예상 밖 예외 — 삼키지 않고 트레이스백까지 남긴다.
+            # 여기서 재발생시키면 폴링 루프 태스크 자체가 조용히 죽어버리므로
+            # (asyncio는 미처리 태스크 예외를 stderr에만 남기고 계속 진행하지 않는다),
+            # 다른 DriverError와 동일하게 오프라인 상태로 처리하고 다음 주기에 재시도한다.
+            logger.exception(
+                "device %s poll raised unexpected error", self._get_device_label(device_id)
+            )
+            status = DeviceStatus(
+                online=False,
+                in_call=False,
+                muted=False,
+                call_peer=None,
+                last_polled_at=_now_iso(),
+                error=f"unexpected error: {exc}",
+            )
+            runtime.driver = None
 
         if status.online:
             runtime.consecutive_failures = 0

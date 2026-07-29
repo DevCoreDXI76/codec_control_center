@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import logging
 from collections.abc import Awaitable, Callable
 
 from fastapi import APIRouter, HTTPException, Request
@@ -12,6 +13,8 @@ from app.core.driver_base import DeviceDriver, DriverError
 from app.core.history import ControlHistory
 from app.core.polling import PollingScheduler
 from app.core.registry import DeviceRegistry
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/devices", tags=["control"])
 
@@ -89,8 +92,16 @@ async def _run_control(
     try:
         ok = await action(driver)
     except DriverError as exc:
+        logger.warning("device %s %s failed: %s", device_name, action_name, exc)
         history.log(device_id=device_id, device_name=device_name, action=action_name, success=False, detail=str(exc))
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        # DriverError가 아닌 예상 밖 예외 — 트레이스백까지 남기고 이력에도 기록한 뒤 502로 응답한다.
+        logger.exception("device %s %s raised unexpected error", device_name, action_name)
+        history.log(
+            device_id=device_id, device_name=device_name, action=action_name, success=False, detail=str(exc)
+        )
+        raise HTTPException(status_code=502, detail=f"unexpected error: {exc}") from exc
 
     history.log(device_id=device_id, device_name=device_name, action=action_name, success=ok, detail=detail)
     return {"ok": ok}

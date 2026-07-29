@@ -18,6 +18,9 @@ Phase③ 실장비(VDI) 검증 1차 피드백 반영.
 
 ### Added
 - `data/app.log`에 폴링/드라이버 접속 오류를 파일로 기록 (RotatingFileHandler, 5MB x 3).
+  - 폴링 실패뿐 아니라 Mute/Dial/Hangup/Reboot 등 제어 API 실패도 함께 기록.
+  - 로그에 device_id(uuid) 대신 장비 이름을 남겨 어느 회의실인지 바로 식별 가능.
+  - DriverError(예상된 접속/명령 오류)는 warning으로, 그 외 예상 밖 예외는 트레이스백 포함 error로 구분 기록 — 폴링 루프가 버그로 조용히 죽는 것도 방지.
 - 영속 저장 파일(`devices.enc.json`, `settings.json`, `credentials.enc.json`, `history.sqlite3`)에 데이터 스키마 버전 관리 도입.
 
 ## [1.0.0] - 2026-07-29

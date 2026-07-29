@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 import pytest
 
@@ -249,3 +250,62 @@ async def test_reset_device_unknown_or_no_session_is_noop(registry):
     await scheduler.reset_device("no-such-device")  # 예외 없이 무시
     await scheduler.add_device("dev-1")
     await scheduler.reset_device("dev-1")  # 아직 연결 안 된 상태도 무시
+
+
+class _BoomDriver(DeviceDriver):
+    """DriverError가 아닌 예상 밖 예외(버그)를 흉내내는 테스트 전용 드라이버."""
+
+    async def connect(self) -> None:
+        pass
+
+    async def disconnect(self) -> None:
+        pass
+
+    async def get_status(self) -> DeviceStatus:
+        raise RuntimeError("boom")
+
+    async def mute(self, on: bool) -> bool:
+        return True
+
+    async def dial(self, address: str) -> bool:
+        return True
+
+    async def hangup(self) -> bool:
+        return True
+
+    async def reboot(self) -> bool:
+        return True
+
+    async def get_calendar_status(self) -> str:
+        return "registered"
+
+    async def get_obtp_entries(self) -> list[CalendarEntry]:
+        return []
+
+    async def join_meeting(self, entry: CalendarEntry) -> bool:
+        return True
+
+
+async def test_unexpected_exception_marked_offline_not_raised(caplog):
+    """DriverError가 아닌 버그성 예외도 삼키지 않고 로그로 남기되, 폴링 루프 자체는
+    죽지 않고 오프라인 상태로 계속 재시도해야 한다."""
+    scheduler = PollingScheduler(driver_factory=lambda device_id: _BoomDriver(), base_interval=15.0)
+    await scheduler.add_device("dev-1")
+    with caplog.at_level(logging.ERROR, logger="app.core.polling"):
+        status = await scheduler.poll_once("dev-1")
+    assert status.online is False
+    assert "unexpected error" in status.error
+    assert any("unexpected error" in record.message for record in caplog.records)
+
+
+async def test_poll_failure_logs_device_label_not_raw_id(registry, caplog):
+    registry.connect_should_fail["dev-1"] = True
+    scheduler = PollingScheduler(
+        driver_factory=registry.factory,
+        base_interval=10.0,
+        get_device_label=lambda device_id: "3층 대회의실",
+    )
+    await scheduler.add_device("dev-1")
+    with caplog.at_level(logging.WARNING, logger="app.core.polling"):
+        await scheduler.poll_once("dev-1")
+    assert any("3층 대회의실" in record.message for record in caplog.records)

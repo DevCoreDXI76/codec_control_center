@@ -4,6 +4,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.driver_base import CalendarEntry, DeviceDriver, DeviceStatus
 from app.core.driver_factory import build_driver_factory
 from app.core.history import ControlHistory
 from app.core.polling import PollingScheduler
@@ -117,3 +118,62 @@ def test_reboot(client, cisco_sim):
 def test_mute_unknown_device_404(client):
     resp = client.post("/api/devices/no-such-id/mute", json={"on": True})
     assert resp.status_code == 404
+
+
+class _BoomDriver(DeviceDriver):
+    """DriverError가 아닌 예상 밖 예외(버그)를 흉내내는 테스트 전용 드라이버."""
+
+    async def connect(self) -> None:
+        pass
+
+    async def disconnect(self) -> None:
+        pass
+
+    async def get_status(self) -> DeviceStatus:
+        return DeviceStatus(online=True, in_call=False, muted=False, call_peer=None, last_polled_at="now")
+
+    async def mute(self, on: bool) -> bool:
+        raise RuntimeError("boom")
+
+    async def dial(self, address: str) -> bool:
+        raise RuntimeError("boom")
+
+    async def hangup(self) -> bool:
+        raise RuntimeError("boom")
+
+    async def reboot(self) -> bool:
+        raise RuntimeError("boom")
+
+    async def get_calendar_status(self) -> str:
+        return "registered"
+
+    async def get_obtp_entries(self) -> list[CalendarEntry]:
+        return []
+
+    async def join_meeting(self, entry: CalendarEntry) -> bool:
+        raise RuntimeError("boom")
+
+
+def test_unexpected_driver_exception_returns_502_and_logs_history(client):
+    credential_ref = app.state.vault.store(json.dumps({"username": "admin", "password": "pw"}))
+    device = app.state.registry.add_device(
+        name="버그있는장비",
+        vendor="cisco",
+        connection_type="ssh",
+        host="127.0.0.1",
+        port=1,
+        group="TEST",
+        credential_ref=credential_ref,
+        is_simulated=True,
+    )
+    app.state.scheduler = PollingScheduler(driver_factory=lambda device_id: _BoomDriver())
+    asyncio.run(app.state.scheduler.add_device(device.id))
+
+    resp = client.post(f"/api/devices/{device.id}/mute", json={"on": True})
+    assert resp.status_code == 502
+    assert "unexpected error" in resp.json()["detail"]
+
+    entries = app.state.history.list_recent()
+    assert len(entries) == 1
+    assert entries[0].success is False
+    assert entries[0].action == "mute"

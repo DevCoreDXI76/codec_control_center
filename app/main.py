@@ -90,6 +90,12 @@ app.state.settings_store = SettingsStore(DATA_DIR / "settings.json")
 app.state.settings = app.state.settings_store.load()
 app.state.history = ControlHistory(DATA_DIR / "history.sqlite3")
 
+def _device_label(device_id: str) -> str:
+    """로그용 — device_id(uuid) 대신 사람이 알아볼 수 있는 장비 이름을 남긴다."""
+    device = app.state.registry.get_device(device_id)
+    return device.name if device is not None else device_id
+
+
 app.state.scheduler = PollingScheduler(
     driver_factory=build_driver_factory(
         app.state.registry,
@@ -99,6 +105,7 @@ app.state.scheduler = PollingScheduler(
     base_interval=app.state.settings.poll_interval,
     max_concurrency=app.state.settings.max_concurrency,
     on_status=app.state.broadcaster.notify,
+    get_device_label=_device_label,
 )
 
 app.include_router(devices_router)
