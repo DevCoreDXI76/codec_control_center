@@ -1,8 +1,8 @@
 import pytest
 import pytest_asyncio
 
-from app.core.driver_base import CalendarEntry
-from app.drivers.cisco.cisco_driver import CiscoDriver
+from app.core.driver_base import CalendarEntry, DriverCommandError
+from app.drivers.cisco.cisco_driver import CiscoDriver, _check_result_ok
 from app.simulator.cisco_sim_server import CiscoSimServer
 
 
@@ -126,3 +126,28 @@ async def test_full_lifecycle_no_exceptions(sim_and_driver):
     await driver.dial("1234")
     await driver.hangup()
     await driver.reboot()
+
+
+# --- _check_result_ok (Cisco 오류 케이스 처리) ---
+
+
+def test_check_result_ok_true_on_status_ok():
+    lines = ["*r AudioMicrophonesMuteResult (status=OK):"]
+    assert _check_result_ok(lines, "*r AudioMicrophonesMuteResult") is True
+
+
+def test_check_result_ok_raises_with_device_response_on_error_status():
+    lines = ['*r AudioMicrophonesMuteResult (status=Error): Reason: "insufficient permission"']
+    with pytest.raises(DriverCommandError, match="insufficient permission"):
+        _check_result_ok(lines, "*r AudioMicrophonesMuteResult")
+
+
+def test_check_result_ok_raises_on_unexpected_response():
+    lines = ["some completely unrelated line"]
+    with pytest.raises(DriverCommandError, match="unexpected response"):
+        _check_result_ok(lines, "*r AudioMicrophonesMuteResult")
+
+
+def test_check_result_ok_raises_on_empty_response():
+    with pytest.raises(DriverCommandError, match="empty response"):
+        _check_result_ok([], "*r AudioMicrophonesMuteResult")

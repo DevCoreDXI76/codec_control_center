@@ -78,12 +78,18 @@
 
 **목표**: Cisco xAPI 기반 기능을 심화하여 Poly 대비 부족한 기능 보완.
 
-- [ ] 대상 Cisco 모델 확정 및 해당 모델 API Reference Guide 재확인
-- [ ] 추가 상태 정보(카메라, 화면공유, 참가자 목록 등) 조회 기능 검토 및 필요 시 구현
-- [ ] xAPI 이벤트 구독(Feedback Registration) 방식 검토 — 폴링 대비 효율 개선 가능성 평가
-- [ ] Cisco 특화 오류 케이스(권한 부족, 명령 미지원 모델 등) 처리 보강
+- [x] 대상 Cisco 모델 확정 및 해당 모델 API Reference Guide 재확인 — 2026-07-29: Room Kit, Room Kit
+      Pro, Room Kit EQ, Room Bar, Room Bar Pro 확정. RoomOS 11 API Reference Guide(D15502.02)로
+      mute/dial/hangup/reboot/캘린더 명령 재확인, 캘린더/OBTP 구현 완료 (SPEC.md 13절 참고).
+- [x] 추가 상태 정보(카메라, 화면공유, 참가자 목록 등) 조회 기능 검토 및 필요 시 구현 — 검토 결과
+      지금은 구현하지 않기로 결정 (사유: SPEC.md 13.1절).
+- [x] xAPI 이벤트 구독(Feedback Registration) 방식 검토 — 폴링 대비 효율 개선 가능성 평가 — 검토
+      결과 현재 폴링 구조 유지 결정 (사유: SPEC.md 13.2절).
+- [x] Cisco 특화 오류 케이스(권한 부족, 명령 미지원 모델 등) 처리 보강 — mute/dial/hangup 실패 시
+      장비 응답 원문을 DriverCommandError로 노출하도록 개선 (SPEC.md 12절, cisco_driver.py).
 
 **완료 조건(DoD)**: Cisco 장비에서 Phase ①~④ 대비 확장된 상태/제어 기능이 문서 근거와 함께 정상 동작.
+시뮬레이터 기준 충족 확인 — Phase③ 실장비 검증(특히 Bookings List/Get 응답 필드) 별도 필요.
 
 ---
 

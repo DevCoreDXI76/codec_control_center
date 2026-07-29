@@ -13,6 +13,15 @@ Room Kit EQ, Room Bar, Room Bar Pro — 전부 RoomOS 통합 xAPI를 사용한�
      src/CiscoCodec.cs, src/BookingsDataClasses.cs) -> 명령 문자열·JSON 응답 필드명 확인.
   3) Cisco 공식 "Cisco collaboration devices RoomOS 11 API Reference Guide"
      (D15502.02, 2023-02) 전문 — 명령 문법과 일부 응답 예시(Bookings status 등) 확인.
+
+계정 권한(Requires user role) — 위 문서에서 확인됨. 계정 발급 시 최소 USER 역할이
+있어야 아래 명령이 전부 동작한다 (권한 부족으로 인한 실패를 예방하려면 계정 설정
+단계에서 이 요구사항을 안내할 것):
+  - Audio Microphones Mute/Unmute: ADMIN, INTEGRATOR, USER
+  - Dial: ADMIN, INTEGRATOR, USER
+  - SystemUnit Boot: ADMIN, INTEGRATOR, USER
+  - Call Disconnect: 문서에 개별 확인은 못 했으나 다른 통화 제어 명령과 동일하게
+    ADMIN/INTEGRATOR/USER 수준일 가능성이 높음 (Phase③ 실장비에서 재확인 권장).
 """
 
 # --- Audio Microphones Mute/Unmute (파라미터 없음) ---

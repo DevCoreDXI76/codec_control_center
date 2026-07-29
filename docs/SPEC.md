@@ -282,3 +282,49 @@ class DeviceDriver(ABC):
 - 드라이버 계층 예외는 공통 `DriverError`(연결 실패/인증 실패/명령 실패/타임아웃 세분화)로 표준화하여 상위 계층에 전달.
 - 로그에는 IP/장비명 등은 남기되, 계정정보(ID/PW)는 어떤 경우에도 기록하지 않는다.
 - UI에는 사용자 친화적 오류 메시지(예: "접속 실패 — 인증정보 확인 필요")로 변환하여 노출.
+- Cisco 제어 명령(mute/dial/hangup)은 명령 실패 시 조용히 `False`를 반환하지 않고
+  `DriverCommandError`에 장비 응답 원문을 담아 올린다 — 정확한 오류 코드 체계는
+  공식 문서에 없지만, 원문을 그대로 `/logs`·UI 토스트에 노출하면 권한 부족/미지원
+  명령 등 실패 원인을 사용자가 확인할 수 있다 (`cisco_driver._check_result_ok`).
+- Cisco 계정은 최소 **USER** 역할이 있어야 mute/dial/reboot이 전부 동작한다
+  (RoomOS 11 API Reference Guide 확인 — 상세는 `cisco_commands.py` 상단 주석).
+  장비 등록 시 계정 권한 부족으로 인한 실패를 예방하려면 이 요구사항을 사용자에게 안내할 것.
+
+## 13. Phase⑤ 검토 사항 (Cisco 드라이버 확장)
+
+대상 모델 확정(2026-07-29: Room Kit/Room Kit Pro/Room Kit EQ/Room Bar/Room Bar Pro) 이후
+PLAN.md Phase⑤ 체크리스트 중 "검토" 성격의 두 항목을 아래와 같이 정리한다.
+
+### 13.1 추가 상태 정보 (카메라/화면공유/참가자 목록 등) — 검토 결과: 지금은 구현하지 않음
+
+RoomOS 11 API Reference Guide에는 `xStatus Cameras Camera [n] ...`,
+`xStatus Conference Presentation LocalInstance [n] ...`,
+`xStatus Conference Call [n] Capabilities ...` 등 매우 세분화된 상태 경로가 존재하며,
+확장 자체는 기술적으로 가능하다.
+
+다만 다음 이유로 이번 단계에서는 구현하지 않기로 한다:
+- `DeviceDriver`는 Poly/Cisco 공통 인터페이스다. Cisco 전용 필드를 `DeviceStatus`에
+  추가하면 Poly 쪽 동등 기능 확인 전까지 인터페이스 대칭이 깨진다.
+- PRD 핵심 목표(등록·상태감시·mute/dial/hangup/reboot·Teams 캘린더)에 카메라/화면공유/
+  참가자 수 추적은 명시적으로 포함되어 있지 않다 — 실사용 니즈가 확인되면 그때
+  `DeviceStatus`를 확장하거나 별도 엔드포인트(`/api/devices/{id}/details` 등)로 분리한다.
+- 확인된 xStatus 경로들은 문서·주석으로 남겨두었으므로, 필요해지면 바로 착수 가능하다.
+
+### 13.2 xAPI 이벤트 구독(Feedback Registration) — 검토 결과: 폴링 유지
+
+RoomOS는 `xFeedback register <path>` 로 상태 변경을 push 받을 수 있다(예:
+`xFeedback register /Status/Audio`). 폴링 대신 이걸 쓰면 이론적으로 지연 없이 상태를
+받을 수 있고 불필요한 조회 트래픽도 줄어든다.
+
+그럼에도 지금은 전환하지 않고 현재의 폴링(`PollingScheduler`, Semaphore 동시성 제한 +
+지수 백오프) 구조를 유지하기로 한다:
+- SPEC.md 8/9절의 핵심 설계 목표가 "보안 장비(IDS/IPS) 오탐 회피를 위한 보수적 폴링"이다.
+  Feedback 구독은 세션을 계속 열어두는 push 방식이라, 이 목표와 상충하지는 않지만
+  검증되지 않은 새로운 트래픽 패턴을 만든다 — Phase③ 보안팀 협의 없이 먼저 바꾸지 않는다.
+- Poly에는 대응하는 confirmed 구독 메커니즘이 없다(Phase①에서 폴링 기반으로만 확정).
+  Cisco만 push로 바꾸면 드라이버 계층의 일관성이 깨진다.
+- 장비 수(PRD 기준 20대+) 규모에서 현재 폴링 주기(기본 15초, 설정 가능)로 이미
+  "5초 이내 확인" 목표(PRD 8절)를 만족하므로, 지금 시점에 효율 개선이 급하지 않다.
+
+재검토 조건: 장비 수가 크게 늘어나 폴링 트래픽이 부담되거나, Poly 쪽에서도 동등한
+push 메커니즘이 확인되어 드라이버 계층을 일관되게 바꿀 수 있을 때.

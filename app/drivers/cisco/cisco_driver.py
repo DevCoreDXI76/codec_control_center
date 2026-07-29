@@ -162,21 +162,21 @@ class CiscoDriver(DeviceDriver):
         command = cmd.AUDIO_MUTE if on else cmd.AUDIO_UNMUTE
         expected = "*r AudioMicrophonesMuteResult" if on else "*r AudioMicrophonesUnmuteResult"
         lines = self._call_block_sync(command)
-        return any(line.startswith(expected) and "status=OK" in line for line in lines)
+        return _check_result_ok(lines, expected)
 
     async def dial(self, address: str) -> bool:
         return await asyncio.to_thread(self._dial_sync, address)
 
     def _dial_sync(self, address: str) -> bool:
         lines = self._call_block_sync(cmd.dial(address))
-        return any(line.startswith("*r DialResult") and "status=OK" in line for line in lines)
+        return _check_result_ok(lines, "*r DialResult")
 
     async def hangup(self) -> bool:
         return await asyncio.to_thread(self._hangup_sync)
 
     def _hangup_sync(self) -> bool:
         lines = self._call_block_sync(cmd.CALL_DISCONNECT)
-        return any(line.startswith("*r CallDisconnectResult") and "status=OK" in line for line in lines)
+        return _check_result_ok(lines, "*r CallDisconnectResult")
 
     async def reboot(self) -> bool:
         return await asyncio.to_thread(self._reboot_sync)
@@ -228,6 +228,25 @@ class CiscoDriver(DeviceDriver):
         if not entry.join_uri:
             raise DriverCommandError("meeting has no dialable join_uri")
         return await self.dial(entry.join_uri)
+
+
+def _check_result_ok(lines: list[str], expected_prefix: str) -> bool:
+    """명령 결과 라인이 status=OK인지 확인한다.
+
+    RoomOS 문서는 성공 응답 형식(``*r <Command>Result (status=OK): ... ** end``)만
+    확정되어 있고, 권한 부족/미지원 명령 등 실패 시 정확한 오류 코드 체계는 문서에
+    없다. 대신 실패를 조용히 False로 삼키지 않고, 장비가 실제로 보낸 응답 원문을
+    DriverCommandError에 담아 올린다 — 그래야 /logs·UI 토스트에서 "왜" 실패했는지
+    확인할 수 있다 (권한 부족, 모델 미지원 명령 등 실제 원인은 이 원문에서 드러난다).
+    """
+    for line in lines:
+        if line.startswith(expected_prefix):
+            if "status=OK" in line:
+                return True
+            raise DriverCommandError(f"device rejected command: {line}")
+    if lines:
+        raise DriverCommandError(f"unexpected response: {lines}")
+    raise DriverCommandError("empty response from device")
 
 
 def _extract_meeting_ids(list_lines: list[str]) -> list[str]:
