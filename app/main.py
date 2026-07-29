@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.api.routes_control import router as control_router
 from app.api.routes_devices import router as devices_router
+from app.api.routes_teams import router as teams_router
 from app.api.ws_status import StatusBroadcaster
 from app.api.ws_status import router as ws_status_router
 from app.core.driver_factory import build_driver_factory
@@ -48,6 +49,7 @@ app.state.scheduler = PollingScheduler(
 
 app.include_router(devices_router)
 app.include_router(control_router)
+app.include_router(teams_router)
 app.include_router(ws_status_router)
 
 
