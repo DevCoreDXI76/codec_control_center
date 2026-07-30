@@ -131,32 +131,58 @@
           data-in-call="{{ '1' if s and s.in_call else '0' }}"
         >
           <div class="card-head">
-            <h3>{{ d.name }}{% if d.is_simulated %}<span class="badge">SIM</span>{% endif %}</h3>
+            <h3>{{ d.name }}{% if d.is_simulated %}<span class="meta" style="margin-left:0.4rem;font-size:0.68rem;">SIM</span>{% endif %}</h3>
+            <a href="#" class="meta" style="text-decoration:none;" onclick="openEditDevice('{{ d.id }}'); return false;" title="장비 수정">✎</a>
           </div>
-          <div class="meta">{{ d.vendor }} · {{ d.connection_type }} · {{ d.host }}:{{ d.port }} · {{ d.group }}</div>
+          <div class="meta" data-field="model-text">{{ d.model if d.model else '모델 확인 중...' }} · {{ d.vendor }} · {{ d.connection_type }} · {{ d.host }}</div>
           <div class="status-line">
             <span class="status-dot"></span>
             <span data-field="status-text">
-              {% if not s %}미확인{% elif not s.online %}오프라인{% elif s.in_call %}통화중{% else %}온라인{% endif %}
+              {% if not s %}미확인{% elif not s.online %}오프라인{% elif s.in_call %}통화중{% else %}대기중{% endif %}
             </span>
+            <span data-field="call-subject"></span>
           </div>
-          <div class="meta" data-field="mute-text">{{ '음소거됨' if s and s.muted else '음소거 안됨' }}</div>
           <div class="meta" data-field="last-updated">{{ s.last_polled_at if s else '아직 폴링 안됨' }}</div>
+          <div class="meta" data-field="reboot-text" data-uptime-seconds="{{ s.uptime_seconds if s and s.uptime_seconds else '' }}"></div>
           <p class="error-text" data-field="error-text" style="{{ '' if s and s.error else 'display:none' }}">{{ s.error if s and s.error else '' }}</p>
 
-          <div class="card-actions">
+          <div class="icon-row">
             <button
-              class="btn"
-              data-field="mute-btn"
+              class="icon-btn mic-preview"
+              data-field="mute-icon-btn"
               data-muted="{{ '1' if s and s.muted else '0' }}"
               onclick="toggleMute('{{ d.id }}', this)"
             >
-              {{ '🎤 Unmute' if s and s.muted else '🔇 Mute' }}
+              <svg viewBox="0 0 24 24" data-icon="mic"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/></svg>
+              <span class="tip">음소거</span>
             </button>
-            <button class="btn" onclick="hangupCall('{{ d.id }}', this)">☎ 종료</button>
-            <button class="btn" onclick="refreshStatus('{{ d.id }}')">⟳ 새로고침</button>
-            <button class="btn btn-danger" onclick="rebootDevice('{{ d.id }}', '{{ d.name }}', this)">재부팅</button>
-            <button class="btn" onclick="deleteDevice('{{ d.id }}', '{{ d.name }}', this)">삭제</button>
+            <button class="icon-btn hangup-preview" data-field="hangup-icon-btn" onclick="hangupCall('{{ d.id }}', this)">
+              <svg class="phone-icon" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              <span class="tip">통화 종료</span>
+            </button>
+            <button class="icon-btn" data-field="refresh-icon-btn" onclick="refreshStatusWithSpin('{{ d.id }}', this)">
+              <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3"/><polyline points="18 3 18 7 14 7"/><polyline points="6 21 6 17 10 17"/></svg>
+              <span class="tip">상태 새로고침</span>
+            </button>
+            <button class="icon-btn" data-field="reboot-icon-btn" onclick="rebootDevice('{{ d.id }}', '{{ d.name }}', this)">
+              <svg viewBox="0 0 24 24"><path d="M12 2v6"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>
+              <span class="tip">재부팅</span>
+            </button>
+          </div>
+
+          <div class="teams-box" data-field="teams-box">
+            <div class="teams-label" data-field="teams-label">Teams · 불러오는 중...</div>
+            <div data-field="teams-meetings"></div>
+            <div class="dial-row">
+              <div class="id-wrap">
+                <input class="id-input" type="text" inputmode="numeric" maxlength="10" placeholder="회의ID" data-field="dial-id-input" />
+                <span class="at">@</span>
+                <input class="tenant-input" type="text" value="{{ d.teams_tenant_address or '' }}" data-field="dial-tenant-input" />
+              </div>
+              <button class="dial-btn" title="다이얼 (Enter로도 실행)" data-field="dial-btn" onclick="directDial('{{ d.id }}', this)">
+                <svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              </button>
+            </div>
           </div>
         </div>
         {% endfor %}
