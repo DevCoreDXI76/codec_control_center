@@ -93,3 +93,32 @@ def test_settings_page_renders(client):
     assert "설정" in resp.text
     assert "폴링 주기" in resp.text
     assert f"v{__version__}" in resp.text
+
+
+def test_settings_page_escapes_default_empty_tenant_in_x_data_attribute(client):
+    # `""|tojson` still emits two literal `"` characters, which — without |forceescape —
+    # terminate the double-quoted x-data="..." HTML attribute early and break the whole
+    # Alpine object literal for EVERY user, even with no tenant address configured
+    # (the bug affects the default case, not just values containing a quote). Regression
+    # test for Fix 1.
+    resp = client.get("/settings")
+    assert resp.status_code == 200
+    assert "teams_tenant_address: &#34;&#34;," in resp.text
+    assert 'teams_tenant_address: "",' not in resp.text
+
+
+def test_settings_page_escapes_saved_tenant_address_in_x_data_attribute(client):
+    client.put(
+        "/api/settings",
+        json={
+            "poll_interval": 15.0,
+            "max_concurrency": 8,
+            "command_timeout": 7.0,
+            "open_browser_on_start": True,
+            "teams_tenant_address": "vc.poscodx.com",
+        },
+    )
+    resp = client.get("/settings")
+    assert resp.status_code == 200
+    assert "teams_tenant_address: &#34;vc.poscodx.com&#34;," in resp.text
+    assert 'teams_tenant_address: "vc.poscodx.com",' not in resp.text

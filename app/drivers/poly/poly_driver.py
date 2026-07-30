@@ -275,7 +275,14 @@ class PolyDriver(DeviceDriver):
                 continue
             _, meeting_id, start, end, subject = line.split("|", 4)
             join_uri = await self._fetch_join_uri(meeting_id)
-            entries.append(CalendarEntry(subject=subject, start_time=start, end_time=end, join_uri=join_uri))
+            entries.append(
+                CalendarEntry(
+                    subject=subject,
+                    start_time=_normalize_poly_datetime(start),
+                    end_time=_normalize_poly_datetime(end),
+                    join_uri=join_uri,
+                )
+            )
         return entries
 
     async def _fetch_join_uri(self, meeting_id: str) -> str | None:
@@ -296,6 +303,20 @@ class PolyDriver(DeviceDriver):
             raise DriverCommandError("meeting has no dialable join_uri")
         resp = await self._call(cmd.dial_phone(entry.join_uri))
         return resp.startswith("dialing")
+
+
+def _normalize_poly_datetime(raw: str) -> str:
+    """Poly의 "YYYY-MM-DD:HH:MM" 타임스탬프를 Cisco(ISO 8601)와 비교 가능한
+    "YYYY-MM-DDTHH:MM:00" 형태로 변환한다.
+
+    두 벤더의 CalendarEntry.start_time/end_time은 JS 쪽에서 문자열 사전순
+    비교(오늘 남은 회의 필터링, 정렬)에 그대로 쓰이는 공유 계약이다. Poly는
+    날짜/시간 구분자로 ":"(0x3A)를, ISO는 "T"(0x54)를 쓰는데 ":"가 "T"보다
+    아스키상 앞이라 Poly 회의는 항상 "이미 지난 회의"로 비교돼버린다 — 그래서
+    드라이버 경계에서 정규화해 형태를 맞춘다. Poly는 타임존 오프셋을 보내지
+    않으므로 오프셋/Z는 붙이지 않고(naive local-time) 초 단위(:00)만 채운다.
+    """
+    return raw.replace(":", "T", 1) + ":00"
 
 
 _UPTIME_UNIT_SECONDS = {"day": 86400, "hour": 3600, "minute": 60, "second": 1}

@@ -203,7 +203,10 @@ async function hangupCall(deviceId, btn) {
   }
 }
 
-async function rebootDevice(deviceId, deviceName, btn) {
+async function rebootDevice(deviceId, btn) {
+  const card = btn.closest(".device-card");
+  const nameEl = card ? card.querySelector("h3") : null;
+  const deviceName = nameEl ? nameEl.firstChild.textContent.trim() : deviceId;
   if (!confirm(`"${deviceName}" 장비를 재부팅하시겠습니까?\n일시적으로 응답하지 않게 됩니다.`)) return;
   btn.disabled = true;
   const ok = await callControl(deviceId, "reboot");
@@ -491,7 +494,7 @@ async function directDial(deviceId, btn) {
   const resp = await fetch(`/api/devices/${deviceId}/direct-dial`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ meeting_id: meetingId }),
+    body: JSON.stringify({ meeting_id: meetingId, tenant_address: tenantInput.value.trim() }),
   });
   btn.disabled = false;
   if (resp.ok) {

@@ -4,7 +4,7 @@ import pytest
 import pytest_asyncio
 
 from app.core.driver_base import CalendarEntry
-from app.drivers.poly.poly_driver import PolyDriver, _parse_uptime
+from app.drivers.poly.poly_driver import PolyDriver, _normalize_poly_datetime, _parse_uptime
 from app.simulator.poly_sim_server import PolySimServer, PolySSHSimServer
 
 
@@ -103,6 +103,11 @@ async def test_get_obtp_entries_returns_seeded_meeting(sim_and_driver):
     assert isinstance(entry, CalendarEntry)
     assert entry.subject == "주간 전체회의"
     assert entry.join_uri == "sip:weekly@example.com"
+    # MockMeeting 시드 데이터는 raw Poly 포맷("2026-07-28:14:00")을 쓰지만,
+    # get_obtp_entries()가 Cisco(ISO 8601)와 비교 가능한 T-구분 형태로 정규화해야 한다
+    # (JS 쪽 사전순 문자열 비교가 두 벤더 모두에서 정확히 동작하려면 필수 — Fix 2 참고).
+    assert entry.start_time == "2026-07-28T14:00:00"
+    assert entry.end_time == "2026-07-28T15:00:00"
 
 
 async def test_join_meeting_dials_join_uri(sim_and_driver):
@@ -202,3 +207,14 @@ def test_parse_uptime_days_hours_minutes():
 
 def test_parse_uptime_unparseable_returns_none():
     assert _parse_uptime("garbage response") is None
+
+
+def test_normalize_poly_datetime_converts_colon_separator_to_t():
+    assert _normalize_poly_datetime("2026-07-28:14:00") == "2026-07-28T14:00:00"
+
+
+def test_normalize_poly_datetime_only_replaces_date_time_separator():
+    # 시:분 사이의 ":"는 그대로 남아야 한다 — 첫 ":"(날짜/시간 경계)만 "T"로 바뀐다.
+    result = _normalize_poly_datetime("2026-01-05:09:30")
+    assert result == "2026-01-05T09:30:00"
+    assert result.count(":") == 2

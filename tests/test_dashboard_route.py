@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from app.core.driver_factory import build_driver_factory
 from app.core.polling import PollingScheduler
 from app.core.registry import DeviceRegistry
+from app.core.settings import SettingsStore
 from app.core.vault import CredentialVault
 from app.main import app
 
@@ -12,6 +13,11 @@ from app.main import app
 def _client(tmp_path):
     app.state.registry = DeviceRegistry(tmp_path / "devices.enc.json")
     app.state.vault = CredentialVault(tmp_path / "credentials.enc.json")
+    # dashboard() now reads app.state.settings (Fix 3b tenant-address prefill) — isolate it
+    # the same way tests/api/test_routes_settings.py does, so this module never depends on
+    # (or mutates) the real, gitignored data/settings.json on the dev machine.
+    app.state.settings_store = SettingsStore(tmp_path / "settings.json")
+    app.state.settings = app.state.settings_store.load()
     app.state.scheduler = PollingScheduler(
         driver_factory=build_driver_factory(app.state.registry, app.state.vault)
     )

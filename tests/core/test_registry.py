@@ -133,6 +133,22 @@ def test_teams_tenant_address_can_be_set(registry):
     assert registry.get_device(device.id).teams_tenant_address == "vc.poscodx.com"
 
 
+def test_teams_tenant_address_empty_string_is_accepted(registry):
+    device = _add_sample(registry, teams_tenant_address="")
+    assert device.teams_tenant_address == ""
+
+
+def test_teams_tenant_address_none_is_accepted(registry):
+    device = _add_sample(registry, teams_tenant_address=None)
+    assert device.teams_tenant_address is None
+
+
+@pytest.mark.parametrize("bad_value", ['vc"poscodx.com', "vc'poscodx.com", "vc.poscodx.com\n@evil", "vc.poscodx.com\rX"])
+def test_teams_tenant_address_rejects_dangerous_characters(registry, bad_value):
+    with pytest.raises(ValueError):
+        _add_sample(registry, teams_tenant_address=bad_value)
+
+
 def test_update_device_sets_model(registry):
     device = _add_sample(registry)
     updated = registry.update_device(device.id, model="RealPresence Group 700")

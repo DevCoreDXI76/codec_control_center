@@ -33,6 +33,7 @@ class JoinRequest(BaseModel):
 
 class DirectDialRequest(BaseModel):
     meeting_id: str
+    tenant_address: str | None = None
 
 
 _MEETING_ID_RE = re.compile(r"^\d{10}\Z")
@@ -106,7 +107,8 @@ async def direct_dial(device_id: str, payload: DirectDialRequest, request: Reque
     if device is None:
         raise HTTPException(status_code=404, detail="device not found")
 
-    tenant = device.teams_tenant_address or request.app.state.settings.teams_tenant_address
+    request_tenant = (payload.tenant_address or "").strip()
+    tenant = request_tenant or device.teams_tenant_address or request.app.state.settings.teams_tenant_address
     if not tenant:
         raise HTTPException(status_code=422, detail="Teams 테넌트 주소가 설정되지 않았습니다")
 

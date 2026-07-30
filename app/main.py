@@ -137,7 +137,9 @@ async def dashboard(request: Request):
     device_list = registry.list_devices()
     devices = [{"device": device, "status": scheduler.get_status(device.id)} for device in device_list]
     groups = sorted({device.group for device in device_list if device.group})
-    return templates.TemplateResponse(request, "index.html", {"devices": devices, "groups": groups})
+    return templates.TemplateResponse(
+        request, "index.html", {"devices": devices, "groups": groups, "settings": request.app.state.settings}
+    )
 
 
 @app.get("/settings")

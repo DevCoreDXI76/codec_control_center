@@ -7,6 +7,8 @@ from dataclasses import dataclass
 VALID_VENDORS = {"poly", "cisco"}
 VALID_CONNECTION_TYPES = {"ssh", "telnet"}
 
+_TENANT_ADDRESS_FORBIDDEN_CHARS = ('"', "'", "\r", "\n")
+
 
 @dataclass
 class Device:
@@ -28,4 +30,9 @@ class Device:
         if self.connection_type not in VALID_CONNECTION_TYPES:
             raise ValueError(
                 f"invalid connection_type: {self.connection_type!r} (expected one of {VALID_CONNECTION_TYPES})"
+            )
+        if self.teams_tenant_address and any(c in self.teams_tenant_address for c in _TENANT_ADDRESS_FORBIDDEN_CHARS):
+            raise ValueError(
+                "teams_tenant_address must not contain quotes or newline characters "
+                f"(got {self.teams_tenant_address!r})"
             )

@@ -29,7 +29,7 @@
           max_concurrency: {{ settings.max_concurrency }},
           command_timeout: {{ settings.command_timeout }},
           open_browser_on_start: {{ 'true' if settings.open_browser_on_start else 'false' }},
-          teams_tenant_address: {{ settings.teams_tenant_address | tojson }},
+          teams_tenant_address: {{ settings.teams_tenant_address | tojson | forceescape }},
           saving: false,
           error: '',
           saved: false,

@@ -22,6 +22,8 @@ SCHEMA_VERSION = 1
 """settings.json 저장 형식 버전. 필드 추가/구조 변경 시 올리고,
 _migrate()에 "if version < N: ..." 형태로 단계별 변환을 추가한다."""
 
+_TENANT_ADDRESS_FORBIDDEN_CHARS = ('"', "'", "\r", "\n")
+
 
 @dataclass
 class AppSettings:
@@ -38,6 +40,11 @@ class AppSettings:
             raise ValueError("max_concurrency must be between 1 and 64")
         if not (1.0 <= self.command_timeout <= 60.0):
             raise ValueError("command_timeout must be between 1 and 60 seconds")
+        if self.teams_tenant_address and any(c in self.teams_tenant_address for c in _TENANT_ADDRESS_FORBIDDEN_CHARS):
+            raise ValueError(
+                "teams_tenant_address must not contain quotes or newline characters "
+                f"(got {self.teams_tenant_address!r})"
+            )
 
 
 class SettingsStore:

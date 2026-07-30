@@ -11,7 +11,7 @@ from app.core.driver_base import (
 from app.core.history import ControlHistory
 from app.core.polling import PollingScheduler
 from app.core.registry import DeviceRegistry
-from app.core.settings import AppSettings
+from app.core.settings import AppSettings, SettingsStore
 from app.core.vault import CredentialVault
 from app.main import app
 
@@ -78,6 +78,12 @@ def client(tmp_path):
     app.state.registry = DeviceRegistry(tmp_path / "devices.enc.json")
     app.state.vault = CredentialVault(tmp_path / "credentials.enc.json")
     app.state.history = ControlHistory(tmp_path / "history.sqlite3")
+    # settings_store must be redirected to tmp_path too — tests in this module save/reload
+    # AppSettings (see test_direct_dial_falls_back_to_global_tenant), and without this the
+    # real, gitignored data/settings.json on the dev machine gets overwritten as a side
+    # effect (mirrors tests/api/test_routes_settings.py's isolation pattern).
+    app.state.settings_store = SettingsStore(tmp_path / "settings.json")
+    app.state.settings = app.state.settings_store.load()
     return TestClient(app)
 
 
@@ -194,6 +200,36 @@ def test_direct_dial_rejects_meeting_id_with_trailing_newline(client):
     device_id, _driver = _register(client, teams_tenant_address="vc.poscodx.com")
     resp = client.post(f"/api/devices/{device_id}/direct-dial", json={"meeting_id": "1234567890\n"})
     assert resp.status_code == 422
+
+
+def test_direct_dial_request_tenant_overrides_device_and_global(client):
+    app.state.settings_store.save(AppSettings(teams_tenant_address="global.vc.poscodx.com"))
+    app.state.settings = app.state.settings_store.load()
+    device_id, driver = _register(client, teams_tenant_address="device.vc.poscodx.com")
+    resp = client.post(
+        f"/api/devices/{device_id}/direct-dial",
+        json={"meeting_id": "1234567890", "tenant_address": "override.vc.poscodx.com"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["address"] == "1234567890@override.vc.poscodx.com"
+    assert driver.dialed_address == "1234567890@override.vc.poscodx.com"
+
+
+def test_direct_dial_blank_request_tenant_falls_back_to_device(client):
+    device_id, driver = _register(client, teams_tenant_address="device.vc.poscodx.com")
+    resp = client.post(
+        f"/api/devices/{device_id}/direct-dial",
+        json={"meeting_id": "1234567890", "tenant_address": "  "},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["address"] == "1234567890@device.vc.poscodx.com"
+
+
+def test_direct_dial_omitted_request_tenant_falls_back_exactly_as_before(client):
+    device_id, driver = _register(client, teams_tenant_address="room.vc.poscodx.com")
+    resp = client.post(f"/api/devices/{device_id}/direct-dial", json={"meeting_id": "1234567890"})
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True, "address": "1234567890@room.vc.poscodx.com"}
 
 
 def test_direct_dial_without_any_tenant_configured_returns_422(client):

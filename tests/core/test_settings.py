@@ -85,3 +85,17 @@ def test_save_and_load_roundtrip_includes_teams_tenant_address(tmp_path):
     store = SettingsStore(tmp_path / "settings.json")
     store.save(AppSettings(teams_tenant_address="vc.poscodx.com"))
     assert store.load().teams_tenant_address == "vc.poscodx.com"
+
+
+def test_teams_tenant_address_empty_string_is_accepted():
+    assert AppSettings(teams_tenant_address="").teams_tenant_address == ""
+
+
+def test_teams_tenant_address_normal_domain_is_accepted():
+    assert AppSettings(teams_tenant_address="vc.poscodx.com").teams_tenant_address == "vc.poscodx.com"
+
+
+@pytest.mark.parametrize("bad_value", ['vc"poscodx.com', "vc'poscodx.com", "vc.poscodx.com\n@evil", "vc.poscodx.com\rX"])
+def test_teams_tenant_address_rejects_dangerous_characters(bad_value):
+    with pytest.raises(ValueError):
+        AppSettings(teams_tenant_address=bad_value)
