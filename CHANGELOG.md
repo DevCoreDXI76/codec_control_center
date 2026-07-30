@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-07-30
+
+Phase③ VDI 실장비 검증 중 발견된 Poly SSH 연결 실패 수정.
+
+### Fixed
+- Poly Group Series 실장비 중 SSH 호스트키로 `ssh-rsa`(SHA-1)만 지원하는 장비가 `Incompatible ssh peer (no acceptable host key)` 오류로 아예 연결되지 않던 문제. paramiko 5.x가 보안 강화를 위해 기본 제외한 `ssh-rsa` 협상/서명 검증 경로를 연결 시점에 복구하도록 수정 (`app/drivers/poly/poly_driver.py`). 다른 암호/키교환/MAC 알고리즘은 최신 기본값 유지.
+
 ## [1.2.0] - 2026-07-30
 
 Teams 수동 다이얼(Pexip OTJ 캘린더 동기화 실패 대비) + 장비 카드 v2.
