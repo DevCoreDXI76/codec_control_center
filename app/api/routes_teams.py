@@ -37,6 +37,7 @@ class DirectDialRequest(BaseModel):
 
 
 _MEETING_ID_RE = re.compile(r"^\d{10}\Z")
+_TENANT_ADDRESS_FORBIDDEN_CHARS = ('"', "'", "\r", "\n")
 
 
 def _get_scheduler(request: Request) -> PollingScheduler:
@@ -102,12 +103,17 @@ async def direct_dial(device_id: str, payload: DirectDialRequest, request: Reque
     if not _MEETING_ID_RE.match(payload.meeting_id):
         raise HTTPException(status_code=422, detail="회의 ID는 숫자 10자리여야 합니다")
 
+    request_tenant = (payload.tenant_address or "").strip()
+    if request_tenant and any(c in request_tenant for c in _TENANT_ADDRESS_FORBIDDEN_CHARS):
+        raise HTTPException(
+            status_code=422, detail="tenant_address must not contain quotes or newline characters"
+        )
+
     registry: DeviceRegistry = request.app.state.registry
     device = registry.get_device(device_id)
     if device is None:
         raise HTTPException(status_code=404, detail="device not found")
 
-    request_tenant = (payload.tenant_address or "").strip()
     tenant = request_tenant or device.teams_tenant_address or request.app.state.settings.teams_tenant_address
     if not tenant:
         raise HTTPException(status_code=422, detail="Teams 테넌트 주소가 설정되지 않았습니다")

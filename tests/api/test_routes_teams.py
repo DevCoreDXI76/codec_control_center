@@ -202,6 +202,19 @@ def test_direct_dial_rejects_meeting_id_with_trailing_newline(client):
     assert resp.status_code == 422
 
 
+def test_direct_dial_rejects_request_tenant_with_injection_characters(client):
+    # payload.tenant_address bypassed Fix 5's forbidden-character check (which only
+    # runs inside Device/AppSettings construction) and flowed straight into the
+    # address string interpolated raw into the device's command line (telnet/SSH).
+    device_id, driver = _register(client, teams_tenant_address="vc.poscodx.com")
+    resp = client.post(
+        f"/api/devices/{device_id}/direct-dial",
+        json={"meeting_id": "1234567890", "tenant_address": 'evil.com" ; rm -rf /'},
+    )
+    assert resp.status_code == 422
+    assert driver.dialed_address is None
+
+
 def test_direct_dial_request_tenant_overrides_device_and_global(client):
     app.state.settings_store.save(AppSettings(teams_tenant_address="global.vc.poscodx.com"))
     app.state.settings = app.state.settings_store.load()
