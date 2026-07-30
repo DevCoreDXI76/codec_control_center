@@ -80,3 +80,12 @@ def bookings_list(days: int = 1, day_offset: int = 0) -> str:
 
 def bookings_get(meeting_id: str) -> str:
     return f'xCommand Bookings Get Id: "{meeting_id}"'
+
+
+# --- SystemUnit 모델/가동시간 — 확인됨 ---
+# 확인: Cisco TelePresence xStatus SystemUnit 상태 트리(SX20 Codec Reference Manual에서 실제
+# 명령/응답 예시 확인 — RoomOS 계열 전반에서 일관 유지되는 경로).
+#   xStatus SystemUnit ProductId -> *s SystemUnit ProductId: "Cisco TelePresence Codec C90"
+STATUS_SYSTEMUNIT_PRODUCT_ID = "xStatus SystemUnit ProductId"
+#   xStatus SystemUnit Uptime -> *s SystemUnit Uptime: 597095 (부팅 후 경과 초, 정수)
+STATUS_SYSTEMUNIT_UPTIME = "xStatus SystemUnit Uptime"

@@ -46,6 +46,7 @@ class CiscoDriver(DeviceDriver):
         self._client: paramiko.SSHClient | None = None
         self._channel = None
         self._buffer = b""
+        self._model: str | None = None
 
     async def connect(self) -> None:
         await asyncio.to_thread(self._connect_sync)
@@ -73,6 +74,17 @@ class CiscoDriver(DeviceDriver):
         self._client = client
         self._channel = channel
         self._buffer = b""
+        self._model = self._fetch_model_sync()
+
+    def _fetch_model_sync(self) -> str | None:
+        try:
+            lines = self._call_block_sync(cmd.STATUS_SYSTEMUNIT_PRODUCT_ID)
+        except DriverError:
+            return None
+        for line in lines:
+            if line.startswith("*s SystemUnit ProductId:"):
+                return line.split(":", 1)[-1].strip().strip('"')
+        return None
 
     async def disconnect(self) -> None:
         await asyncio.to_thread(self._disconnect_sync)
@@ -139,6 +151,7 @@ class CiscoDriver(DeviceDriver):
                 call_peer=None,
                 last_polled_at=now,
                 error=str(exc),
+                model=self._model,
             )
 
     def _get_status_sync(self, now: str) -> DeviceStatus:
@@ -153,7 +166,32 @@ class CiscoDriver(DeviceDriver):
                 call_peer = line.split("RemoteNumber:", 1)[-1].strip().strip('"')
                 break
 
-        return DeviceStatus(online=True, in_call=in_call, muted=muted, call_peer=call_peer, last_polled_at=now)
+        # uptime 조회는 별도로 보호한다: Poly 드라이버에서 발견된 것과 같은 문제
+        # (uptime get 실패가 get_status() 전체를 offline으로 끌어내림)를 막기 위해,
+        # 이 호출 자체의 DriverError(타임아웃/미지원 명령 등)를 mute/call 상태
+        # 조회와 분리해서 흡수한다.
+        try:
+            uptime_lines = self._call_block_sync(cmd.STATUS_SYSTEMUNIT_UPTIME)
+        except DriverError:
+            uptime_lines = []
+        uptime_seconds = None
+        for line in uptime_lines:
+            if line.startswith("*s SystemUnit Uptime:"):
+                try:
+                    uptime_seconds = int(line.split(":", 1)[-1].strip())
+                except ValueError:
+                    uptime_seconds = None
+                break
+
+        return DeviceStatus(
+            online=True,
+            in_call=in_call,
+            muted=muted,
+            call_peer=call_peer,
+            last_polled_at=now,
+            model=self._model,
+            uptime_seconds=uptime_seconds,
+        )
 
     async def mute(self, on: bool) -> bool:
         return await asyncio.to_thread(self._mute_sync, on)

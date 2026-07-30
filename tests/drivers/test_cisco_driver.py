@@ -1,7 +1,8 @@
 import pytest
 import pytest_asyncio
 
-from app.core.driver_base import CalendarEntry, DriverCommandError
+from app.core.driver_base import CalendarEntry, DriverCommandError, DriverTimeoutError
+from app.drivers.cisco import cisco_commands as cisco_cmd
 from app.drivers.cisco.cisco_driver import CiscoDriver, _check_result_ok
 from app.simulator.cisco_sim_server import CiscoSimServer
 
@@ -151,3 +152,39 @@ def test_check_result_ok_raises_on_unexpected_response():
 def test_check_result_ok_raises_on_empty_response():
     with pytest.raises(DriverCommandError, match="empty response"):
         _check_result_ok([], "*r AudioMicrophonesMuteResult")
+
+
+async def test_get_status_includes_model_and_uptime(sim_and_driver):
+    _sim, driver = sim_and_driver
+    status = await driver.get_status()
+    assert status.model == "Room Kit Pro (SIM)"
+    assert status.uptime_seconds == 7384
+
+
+def test_get_status_uptime_failure_still_reports_online():
+    """uptime 조회(STATUS_SYSTEMUNIT_UPTIME)만 실패해도 mute/call 상태 조회는 정상
+    진행되어 online=True를 유지해야 한다 — Poly 드라이버에서 발견된 것과 같은 문제
+    (uptime 조회 실패가 get_status() 전체를 offline으로 끌어내림)가 Cisco 드라이버의
+    _get_status_sync에도 있는지 검증한다. 시뮬레이터가 아직 이 명령에 응답하지
+    않으므로(Task 5 완료 전) 실제 소켓 통신 대신 _call_block_sync를 스텁으로 교체해
+    STATUS_SYSTEMUNIT_UPTIME 호출에만 DriverError를 주입한다."""
+    driver = CiscoDriver(host="127.0.0.1", port=1, username="admin", password="x")
+    driver._model = "Room Kit Pro (SIM)"
+
+    def fake_call_block_sync(command, end="** end"):
+        if command == cisco_cmd.STATUS_SYSTEMUNIT_UPTIME:
+            raise DriverTimeoutError("timeout waiting for device response")
+        if command == cisco_cmd.STATUS_AUDIO_MUTE:
+            return ["*s Audio Microphones Mute: Off"]
+        if command == cisco_cmd.STATUS_CALL:
+            return []
+        raise AssertionError(f"unexpected command in test stub: {command}")
+
+    driver._call_block_sync = fake_call_block_sync
+
+    status = driver._get_status_sync("2026-07-30T00:00:00+00:00")
+
+    assert status.online is True
+    assert status.error is None
+    assert status.uptime_seconds is None
+    assert status.model == "Room Kit Pro (SIM)"

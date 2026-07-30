@@ -39,6 +39,8 @@ class CiscoSimState:
     call_id: str = "27"
     call_peer: str | None = None
     bookings: list[CiscoBooking] = None  # type: ignore[assignment]
+    model: str = "Room Kit Pro (SIM)"
+    uptime_seconds: int = 7384
 
     def __post_init__(self) -> None:
         if self.bookings is None:
@@ -201,6 +203,10 @@ class CiscoSimServer:
         if command.startswith("xCommand Bookings Get"):
             meeting_id = _extract_quoted(command)
             return self._bookings_get_response(meeting_id)
+        if command == "xStatus SystemUnit ProductId":
+            return f'*s SystemUnit ProductId: "{self.state.model}"\r\n** end'
+        if command == "xStatus SystemUnit Uptime":
+            return f"*s SystemUnit Uptime: {self.state.uptime_seconds}\r\n** end"
         return None
 
     def _bookings_list_response(self) -> str:
