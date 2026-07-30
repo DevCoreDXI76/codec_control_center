@@ -28,10 +28,37 @@ function updateCard(deviceId, status) {
   const muteText = card.querySelector("[data-field=mute-text]");
   if (muteText) muteText.textContent = status.muted ? "음소거됨" : "음소거 안됨";
 
-  const muteBtn = card.querySelector("[data-field=mute-btn]");
+  const muteBtn = card.querySelector('[data-field="mute-icon-btn"]');
   if (muteBtn) {
     muteBtn.dataset.muted = status.muted ? "1" : "0";
-    muteBtn.textContent = status.muted ? "🎤 Unmute" : "🔇 Mute";
+    muteBtn.classList.toggle("on", status.in_call && !status.muted);
+    muteBtn.classList.toggle("muted", status.muted);
+    const tip = muteBtn.querySelector(".tip");
+    if (tip) tip.textContent = status.muted ? "음소거 해제" : "음소거";
+  }
+
+  const hangupBtn = card.querySelector('[data-field="hangup-icon-btn"]');
+  if (hangupBtn) {
+    hangupBtn.classList.toggle("on", status.in_call);
+    hangupBtn.classList.toggle("disabled", !status.in_call);
+  }
+
+  const rebootBtn = card.querySelector('[data-field="reboot-icon-btn"]');
+  if (rebootBtn) rebootBtn.classList.toggle("on", status.online);
+
+  const modelText = card.querySelector('[data-field="model-text"]');
+  if (modelText && status.model) {
+    const rest = modelText.textContent.split(" · ").slice(1).join(" · ");
+    modelText.textContent = `${status.model} · ${rest}`;
+  }
+
+  const rebootText = card.querySelector('[data-field="reboot-text"]');
+  if (rebootText) rebootText.textContent = formatLastReboot(status.uptime_seconds);
+
+  const callSubject = card.querySelector('[data-field="call-subject"]');
+  if (callSubject) {
+    const subject = status.in_call ? findActiveMeetingSubject(deviceId, status.call_peer) : null;
+    callSubject.textContent = subject ? ` — "${subject}"` : "";
   }
 
   const errorText = card.querySelector("[data-field=error-text]");
@@ -331,11 +358,120 @@ async function joinMeetingLink(ev, deviceId, entry) {
 }
 
 function renderCardTeamsSection(deviceId, entries) {
-  // Task 14에서 실제 렌더링으로 교체됨
+  const card = document.querySelector(`[data-device-id="${deviceId}"]`);
+  if (!card) return;
+
+  const label = card.querySelector('[data-field="teams-label"]');
+  if (label) {
+    label.textContent = entries.length > 0 ? `Teams · 오늘 남은 회의 ${entries.length}건` : "Teams · 오늘 회의 수신 안됨";
+  }
+
+  const list = card.querySelector('[data-field="teams-meetings"]');
+  if (!list) return;
+  list.textContent = "";
+  for (const entry of entries) {
+    const row = document.createElement("div");
+    row.className = "teams-meeting-row";
+
+    const time = document.createElement("span");
+    time.className = "time";
+    time.textContent = formatMeetingTime(entry.start_time);
+    row.appendChild(time);
+
+    row.appendChild(document.createTextNode(entry.subject + " · "));
+
+    if (entry.join_uri) {
+      const link = document.createElement("a");
+      link.href = "#";
+      link.className = "meeting-link";
+      link.textContent = entry.join_uri;
+      const tip = document.createElement("span");
+      tip.className = "tip";
+      tip.textContent = "참여하기";
+      link.appendChild(tip);
+      link.addEventListener("click", (ev) => joinMeetingLink(ev, deviceId, entry));
+      row.appendChild(link);
+    }
+
+    list.appendChild(row);
+  }
+}
+
+function findActiveMeetingSubject(deviceId, callPeer) {
+  if (!callPeer) return null;
+  const entries = deviceMeetingsCache.get(deviceId) || [];
+  const match = entries.find((entry) => entry.join_uri === callPeer);
+  if (!match) return null;
+  return match.subject.length > 20 ? match.subject.slice(0, 20) + "..." : match.subject;
+}
+
+const REBOOT_WARNING_SECONDS = 30 * 24 * 3600;
+
+function formatLastReboot(uptimeSeconds) {
+  if (uptimeSeconds === null || uptimeSeconds === undefined || uptimeSeconds === "") return "";
+  const seconds = Number(uptimeSeconds);
+  if (Number.isNaN(seconds)) return "";
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  let text = "마지막 재부팅: ";
+  text += days > 0 ? `${days}일 ${hours}시간 전` : `${hours}시간 전`;
+  if (seconds >= REBOOT_WARNING_SECONDS) text += " ⚠";
+  return text;
+}
+
+async function directDial(deviceId, btn) {
+  const card = btn.closest(".device-card");
+  const idInput = card.querySelector('[data-field="dial-id-input"]');
+  const tenantInput = card.querySelector('[data-field="dial-tenant-input"]');
+  const meetingId = idInput.value.trim();
+  if (!/^\d{10}$/.test(meetingId)) {
+    showToast("회의 ID는 숫자 10자리여야 합니다");
+    return;
+  }
+  if (!tenantInput.value.trim()) {
+    showToast("Teams 테넌트 주소를 입력하세요");
+    return;
+  }
+  btn.disabled = true;
+  const resp = await fetch(`/api/devices/${deviceId}/direct-dial`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ meeting_id: meetingId }),
+  });
+  btn.disabled = false;
+  if (resp.ok) {
+    showToast("다이얼 명령 전송됨");
+    await refreshStatus(deviceId);
+  } else {
+    const detail = await resp.json().catch(() => ({}));
+    showToast(`다이얼 실패: ${detail.detail || resp.status}`);
+  }
+}
+
+function wireDialEnterKey() {
+  document.querySelectorAll('[data-field="dial-id-input"]').forEach((input) => {
+    input.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter") return;
+      const card = input.closest(".device-card");
+      const btn = card.querySelector('[data-field="dial-btn"]');
+      if (btn) btn.click();
+    });
+  });
+}
+
+async function refreshStatusWithSpin(deviceId, btn) {
+  btn.classList.add("spin");
+  setTimeout(() => btn.classList.remove("spin"), 700);
+  await refreshStatus(deviceId);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
   connectStatusSocket();
   updateStatBar();
   loadUpcomingMeetings();
+  wireDialEnterKey();
+  document.querySelectorAll('[data-field="reboot-text"]').forEach((el) => {
+    const seconds = el.dataset.uptimeSeconds;
+    el.textContent = formatLastReboot(seconds);
+  });
 });
