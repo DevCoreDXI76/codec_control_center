@@ -6,6 +6,14 @@
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-30
+
+`/logs` 페이지에서 시스템 로그(`data/app.log`)를 볼 수 있는 뷰어 추가.
+
+### Added
+- `GET /logs/system` — `data/app.log`의 마지막 300줄을 최신순으로 표시. `/logs` 페이지에 "제어 로그"/"시스템 로그" 탭을 추가해 전환.
+- 로그 로테이션/보관 정책(5MB × backupCount 3)은 변경 없음 — 조회 UI만 추가.
+
 ## [1.2.1] - 2026-07-30
 
 Phase③ VDI 실장비 검증 중 발견된 Poly SSH 연결 실패 수정.
