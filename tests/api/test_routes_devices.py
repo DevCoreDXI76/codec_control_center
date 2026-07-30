@@ -129,3 +129,34 @@ def test_delete_device_removes_credential_from_vault(client):
 def test_delete_device_not_found(client):
     resp = client.delete("/api/devices/no-such-id")
     assert resp.status_code == 404
+
+
+def test_create_device_with_teams_tenant_address(client):
+    resp = client.post(
+        "/api/devices",
+        json={
+            "name": "3층 대회의실", "vendor": "poly", "connection_type": "telnet",
+            "host": "127.0.0.1", "port": 2323, "group": "3F",
+            "username": "admin", "password": "pw", "is_simulated": True,
+            "teams_tenant_address": "vc.poscodx.com",
+        },
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["teams_tenant_address"] == "vc.poscodx.com"
+    assert body["model"] is None
+
+
+def test_device_response_omits_model_from_create_request_but_reflects_registry_value(client):
+    resp = client.post(
+        "/api/devices",
+        json={
+            "name": "5층 소회의실", "vendor": "cisco", "connection_type": "ssh",
+            "host": "127.0.0.1", "port": 22, "group": "5F",
+            "username": "admin", "password": "pw", "is_simulated": True,
+        },
+    )
+    device_id = resp.json()["id"]
+    app.state.registry.update_device(device_id, model="Room Kit Pro")
+    resp2 = client.get(f"/api/devices/{device_id}")
+    assert resp2.json()["model"] == "Room Kit Pro"

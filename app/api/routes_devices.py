@@ -25,6 +25,7 @@ class DeviceCreateRequest(BaseModel):
     username: str
     password: str
     is_simulated: bool = False
+    teams_tenant_address: str | None = None
 
 
 class DeviceUpdateRequest(BaseModel):
@@ -37,6 +38,7 @@ class DeviceUpdateRequest(BaseModel):
     username: str | None = None
     password: str | None = None
     is_simulated: bool | None = None
+    teams_tenant_address: str | None = None
 
 
 class DeviceResponse(BaseModel):
@@ -48,6 +50,8 @@ class DeviceResponse(BaseModel):
     port: int
     group: str
     is_simulated: bool
+    model: str | None
+    teams_tenant_address: str | None
 
 
 def _to_response(device: Device) -> DeviceResponse:
@@ -60,6 +64,8 @@ def _to_response(device: Device) -> DeviceResponse:
         port=device.port,
         group=device.group,
         is_simulated=device.is_simulated,
+        model=device.model,
+        teams_tenant_address=device.teams_tenant_address,
     )
 
 
@@ -104,6 +110,7 @@ async def create_device(payload: DeviceCreateRequest, request: Request) -> Devic
             group=payload.group,
             credential_ref=credential_ref,
             is_simulated=payload.is_simulated,
+            teams_tenant_address=payload.teams_tenant_address,
         )
     except ValueError as exc:
         vault.delete(credential_ref)
