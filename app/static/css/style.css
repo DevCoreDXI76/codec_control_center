@@ -486,3 +486,205 @@ body {
   background: var(--color-fail-bg);
   color: var(--color-error);
 }
+
+/* 장비 카드 v2 — 아이콘 버튼 (2026-07-30, Teams 수동 다이얼 브레인스토밍) */
+.icon-row {
+  display: flex;
+  gap: 0.6rem;
+  margin: 0.6rem 0 0.75rem;
+}
+
+.icon-btn {
+  position: relative;
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 50%;
+  background: var(--color-bg);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.icon-btn:hover {
+  filter: brightness(1.1);
+}
+
+.icon-btn svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  stroke: var(--color-text);
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon-btn.on svg {
+  stroke: var(--color-online);
+}
+
+.icon-btn.muted svg,
+.icon-btn.mic-preview:hover svg,
+.icon-btn.hangup-preview.on:hover svg {
+  stroke: var(--color-error);
+}
+
+.icon-btn.disabled {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}
+
+.icon-btn .tip {
+  position: absolute;
+  bottom: 2.6rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #000;
+  color: #fff;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 5px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+
+.icon-btn:hover .tip {
+  opacity: 0.95;
+}
+
+.icon-btn.spin svg {
+  animation: icon-spin 0.7s linear;
+}
+
+@keyframes icon-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.phone-icon {
+  transform: rotate(135deg);
+}
+
+.teams-box {
+  background: var(--color-bg);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.teams-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-call);
+  margin-bottom: 0.4rem;
+}
+
+.teams-meeting-row {
+  font-size: 0.82rem;
+  margin-bottom: 0.35rem;
+}
+
+.teams-meeting-row .time {
+  color: var(--color-text-muted);
+  margin-right: 0.4rem;
+}
+
+.meeting-link {
+  color: var(--color-call);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--color-call);
+  position: relative;
+}
+
+.meeting-link .tip {
+  position: absolute;
+  bottom: 1.3rem;
+  left: 0;
+  background: #000;
+  color: #fff;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 5px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+
+.meeting-link:hover .tip {
+  opacity: 0.95;
+}
+
+.dial-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.dial-row .id-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.dial-row input {
+  background: transparent;
+  border: none;
+  color: var(--color-text);
+  font-size: 0.78rem;
+  padding: 0.35rem 0.5rem;
+  outline: none;
+  min-width: 0;
+}
+
+.dial-row .id-input {
+  width: 4.6rem;
+  flex-shrink: 0;
+}
+
+.dial-row .at {
+  color: var(--color-text-muted);
+}
+
+.dial-row .tenant-input {
+  flex: 1;
+  color: var(--color-call);
+  min-width: 0;
+}
+
+.dial-row .dial-btn {
+  flex-shrink: 0;
+  border: none;
+  background: var(--color-bg);
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.dial-row .dial-btn svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  stroke: var(--color-call);
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
