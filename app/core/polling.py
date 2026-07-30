@@ -45,6 +45,7 @@ class PollingScheduler:
         max_concurrency: int = 8,
         on_status: StatusCallback | None = None,
         get_device_label: Callable[[str], str] | None = None,
+        on_model_discovered: Callable[[str, str], None] | None = None,
     ) -> None:
         """get_device_label은 로그에 device_id 대신 사람이 알아볼 수 있는 이름을
         남기기 위한 조회 함수다 (미지정 시 device_id를 그대로 쓴다)."""
@@ -55,6 +56,7 @@ class PollingScheduler:
         self._semaphore = asyncio.Semaphore(max_concurrency)
         self._on_status = on_status
         self._get_device_label = get_device_label or (lambda device_id: device_id)
+        self._on_model_discovered = on_model_discovered
         self._runtimes: dict[str, _DeviceRuntime] = {}
         self._running = False
 
@@ -183,6 +185,9 @@ class PollingScheduler:
                 error=f"unexpected error: {exc}",
             )
             runtime.driver = None
+
+        if status.model and self._on_model_discovered is not None:
+            self._on_model_discovered(device_id, status.model)
 
         if status.online:
             runtime.consecutive_failures = 0

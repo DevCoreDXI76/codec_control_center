@@ -96,6 +96,14 @@ def _device_label(device_id: str) -> str:
     return device.name if device is not None else device_id
 
 
+def _on_model_discovered(device_id: str, model: str) -> None:
+    """폴링에서 처음 확보한 모델명을 레지스트리에 1회 반영한다 — 이미 같은 값이면 쓰지 않는다
+    (매 폴링마다 DPAPI 암호화+파일 쓰기가 일어나는 걸 막기 위함)."""
+    device = app.state.registry.get_device(device_id)
+    if device is not None and device.model != model:
+        app.state.registry.update_device(device_id, model=model)
+
+
 app.state.scheduler = PollingScheduler(
     driver_factory=build_driver_factory(
         app.state.registry,
@@ -106,6 +114,7 @@ app.state.scheduler = PollingScheduler(
     max_concurrency=app.state.settings.max_concurrency,
     on_status=app.state.broadcaster.notify,
     get_device_label=_device_label,
+    on_model_discovered=_on_model_discovered,
 )
 
 app.include_router(devices_router)

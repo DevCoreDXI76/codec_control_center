@@ -309,3 +309,61 @@ async def test_poll_failure_logs_device_label_not_raw_id(registry, caplog):
     with caplog.at_level(logging.WARNING, logger="app.core.polling"):
         await scheduler.poll_once("dev-1")
     assert any("3층 대회의실" in record.message for record in caplog.records)
+
+
+class _ModelReportingDriver(DeviceDriver):
+    async def connect(self) -> None:
+        pass
+
+    async def disconnect(self) -> None:
+        pass
+
+    async def get_status(self) -> DeviceStatus:
+        return DeviceStatus(
+            online=True, in_call=False, muted=False, call_peer=None, last_polled_at="now",
+            model="RealPresence Group 700",
+        )
+
+    async def mute(self, on: bool) -> bool:
+        return True
+
+    async def dial(self, address: str) -> bool:
+        return True
+
+    async def hangup(self) -> bool:
+        return True
+
+    async def reboot(self) -> bool:
+        return True
+
+    async def get_calendar_status(self) -> str:
+        return "registered"
+
+    async def get_obtp_entries(self) -> list[CalendarEntry]:
+        return []
+
+    async def join_meeting(self, entry: CalendarEntry) -> bool:
+        return True
+
+
+async def test_on_model_discovered_called_with_device_id_and_model():
+    discovered: list[tuple[str, str]] = []
+    scheduler = PollingScheduler(
+        driver_factory=lambda device_id: _ModelReportingDriver(),
+        base_interval=15.0,
+        on_model_discovered=lambda device_id, model: discovered.append((device_id, model)),
+    )
+    await scheduler.add_device("dev-1")
+    await scheduler.poll_once("dev-1")
+    assert discovered == [("dev-1", "RealPresence Group 700")]
+
+
+async def test_on_model_discovered_not_called_when_model_is_none(registry):
+    called = []
+    scheduler = PollingScheduler(
+        driver_factory=registry.factory, base_interval=15.0,
+        on_model_discovered=lambda device_id, model: called.append((device_id, model)),
+    )
+    await scheduler.add_device("dev-1")
+    await scheduler.poll_once("dev-1")
+    assert called == []
