@@ -39,6 +39,7 @@ class PolySimState:
     calendar_established: bool = True
     model: str = "RealPresence Group 500 (SIM)"
     uptime_text: str = "2 Hours, 5 Minutes"
+    uptime_fails: bool = False  # True면 uptime get에 무응답 처리 → 드라이버 쪽 타임아웃/연결 오류 재현
     meetings: list[MockMeeting] = field(
         default_factory=lambda: [
             MockMeeting(
@@ -213,6 +214,8 @@ class PolySimServer:
 
     def _handle_uptime(self, tokens: list[str]) -> str | None:
         if tokens[1:] == ["get"]:
+            if self.state.uptime_fails:
+                return None  # 무응답 → 드라이버 _read_line이 타임아웃/연결종료로 처리
             return self.state.uptime_text
         return None
 

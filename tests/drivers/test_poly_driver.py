@@ -131,6 +131,30 @@ async def test_get_status_includes_model_and_uptime(sim_and_driver):
     assert status.uptime_seconds is not None
 
 
+async def test_get_status_uptime_failure_still_reports_online():
+    """uptime get만 실패(무응답)해도 mute/callinfo 조회는 정상 진행되어
+    online=True를 유지해야 한다 — uptime 실패가 전체 offline 판정으로
+    번지지 않도록 get_status()가 uptime 조회를 개별 보호하는지 검증.
+    (짧은 timeout으로 타임아웃 대기를 최소화)"""
+    sim = PolySimServer(host="127.0.0.1", port=0)
+    await sim.start()
+    port = sim._server.sockets[0].getsockname()[1]
+
+    driver = PolyDriver(host="127.0.0.1", port=port, timeout=0.5)
+    await driver.connect()
+    try:
+        sim.state.uptime_fails = True
+        status = await driver.get_status()
+    finally:
+        await driver.disconnect()
+        await sim.stop()
+
+    assert status.online is True
+    assert status.error is None
+    assert status.uptime_seconds is None
+    assert status.model == "RealPresence Group 500 (SIM)"
+
+
 def test_invalid_transport_raises_valueerror():
     with pytest.raises(ValueError):
         PolyDriver(host="127.0.0.1", transport="http")
