@@ -59,13 +59,13 @@
       </div>
       {% endif %}
 
-      <div class="toolbar" x-data="deviceForm()">
+      <div class="toolbar" x-data="deviceForm()" x-init="window.addEventListener('open-edit-device', (ev) => openEdit(ev.detail))">
         <div></div>
-        <button class="btn btn-primary" type="button" @click="open = true">+ 장비 등록</button>
+        <button class="btn btn-primary" type="button" @click="openCreate()">+ 장비 등록</button>
 
         <div class="modal-backdrop" x-show="open" x-cloak @keydown.escape.window="open = false">
           <div class="modal" @click.outside="open = false">
-            <h2>장비 등록</h2>
+            <h2 x-text="editingId ? '장비 수정' : '장비 등록'"></h2>
             <form @submit.prevent="submit()">
               <div class="field">
                 <label>이름</label>
@@ -98,18 +98,23 @@
                 <input type="text" x-model="group" />
               </div>
               <div class="field">
-                <label>계정 ID</label>
+                <label x-text="editingId ? '계정 ID (변경 시에만 입력)' : '계정 ID'"></label>
                 <input type="text" x-model="username" />
               </div>
               <div class="field">
-                <label>계정 PW</label>
+                <label x-text="editingId ? '계정 PW (변경 시에만 입력)' : '계정 PW'"></label>
                 <input type="password" x-model="password" />
+              </div>
+              <div class="field">
+                <label>Teams 테넌트 주소 (선택, 비워두면 전역 설정 사용)</label>
+                <input type="text" x-model="teams_tenant_address" placeholder="vc.poscodx.com" />
               </div>
               <div class="field">
                 <label><input type="checkbox" x-model="is_simulated" /> 시뮬레이터 장비로 등록</label>
               </div>
               <p class="error-text" x-show="error" x-text="error"></p>
               <div class="modal-actions">
+                <button class="btn btn-danger" type="button" x-show="editingId" @click="remove()">삭제</button>
                 <button class="btn" type="button" @click="open = false">취소</button>
                 <button class="btn btn-primary" type="submit" :disabled="saving">저장</button>
               </div>

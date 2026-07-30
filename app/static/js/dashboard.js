@@ -211,23 +211,12 @@ async function rebootDevice(deviceId, deviceName, btn) {
   if (ok) showToast("재부팅 명령 전송됨");
 }
 
-async function deleteDevice(deviceId, deviceName, btn) {
-  if (!confirm(`"${deviceName}" 장비를 삭제하시겠습니까?`)) return;
-  btn.disabled = true;
-  const resp = await fetch(`/api/devices/${deviceId}`, { method: "DELETE" });
-  btn.disabled = false;
-  if (resp.ok) {
-    location.reload();
-  } else {
-    showToast("삭제 실패");
-  }
-}
-
 function deviceForm() {
   return {
     open: false,
     saving: false,
     error: "",
+    editingId: null,
     name: "",
     vendor: "poly",
     connection_type: "telnet",
@@ -236,34 +225,100 @@ function deviceForm() {
     group: "",
     username: "",
     password: "",
+    teams_tenant_address: "",
     is_simulated: true,
+    openCreate() {
+      this.editingId = null;
+      this.name = "";
+      this.vendor = "poly";
+      this.connection_type = "telnet";
+      this.host = "";
+      this.port = 2323;
+      this.group = "";
+      this.username = "";
+      this.password = "";
+      this.teams_tenant_address = "";
+      this.is_simulated = true;
+      this.error = "";
+      this.open = true;
+    },
+    openEdit(device) {
+      this.editingId = device.id;
+      this.name = device.name;
+      this.vendor = device.vendor;
+      this.connection_type = device.connection_type;
+      this.host = device.host;
+      this.port = device.port;
+      this.group = device.group;
+      this.username = "";
+      this.password = "";
+      this.teams_tenant_address = device.teams_tenant_address || "";
+      this.is_simulated = device.is_simulated;
+      this.error = "";
+      this.open = true;
+    },
     async submit() {
       this.saving = true;
       this.error = "";
-      const resp = await fetch("/api/devices", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: this.name,
-          vendor: this.vendor,
-          connection_type: this.connection_type,
-          host: this.host,
-          port: Number(this.port),
-          group: this.group,
-          username: this.username,
-          password: this.password,
-          is_simulated: this.is_simulated,
-        }),
-      });
+      const body = {
+        name: this.name,
+        vendor: this.vendor,
+        connection_type: this.connection_type,
+        host: this.host,
+        port: Number(this.port),
+        group: this.group,
+        teams_tenant_address: this.teams_tenant_address,
+        is_simulated: this.is_simulated,
+      };
+      let resp;
+      if (this.editingId) {
+        if (this.username) body.username = this.username;
+        if (this.password) body.password = this.password;
+        resp = await fetch(`/api/devices/${this.editingId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      } else {
+        body.username = this.username;
+        body.password = this.password;
+        resp = await fetch("/api/devices", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      }
       this.saving = false;
       if (!resp.ok) {
         const detail = await resp.json().catch(() => ({}));
-        this.error = typeof detail.detail === "string" ? detail.detail : "등록 실패";
+        this.error = typeof detail.detail === "string" ? detail.detail : "저장 실패";
         return;
       }
       location.reload();
     },
+    async remove() {
+      if (!this.editingId) return;
+      if (!confirm(`"${this.name}" 장비를 삭제하시겠습니까?`)) return;
+      this.saving = true;
+      const resp = await fetch(`/api/devices/${this.editingId}`, { method: "DELETE" });
+      this.saving = false;
+      if (resp.ok) {
+        location.reload();
+      } else {
+        this.error = "삭제 실패";
+      }
+    },
   };
+}
+
+async function openEditDevice(deviceId) {
+  const resp = await fetch(`/api/devices/${deviceId}`);
+  if (!resp.ok) {
+    showToast("장비 정보를 불러오지 못했습니다");
+    return;
+  }
+  const device = await resp.json();
+  window.dispatchEvent(new CustomEvent("open-edit-device", { detail: device }));
 }
 
 const deviceMeetingsCache = new Map();
