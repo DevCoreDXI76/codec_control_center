@@ -37,6 +37,8 @@ class PolySimState:
     call_peer: str | None = None
     call_id: str = "100"
     calendar_established: bool = True
+    model: str = "RealPresence Group 500 (SIM)"
+    uptime_text: str = "2 Hours, 5 Minutes"
     meetings: list[MockMeeting] = field(
         default_factory=lambda: [
             MockMeeting(
@@ -107,6 +109,10 @@ class PolySimServer:
             return self._handle_calendarstatus(tokens)
         if verb == "calendarmeetings":
             return self._handle_calendarmeetings(tokens)
+        if verb == "systemsetting":
+            return self._handle_systemsetting(tokens)
+        if verb == "uptime":
+            return self._handle_uptime(tokens)
         return None
 
     def _handle_mute(self, tokens: list[str]) -> str | None:
@@ -198,6 +204,16 @@ class PolySimServer:
                 "calendarmeetings info end",
             ]
             return "\r\n".join(lines)
+        return None
+
+    def _handle_systemsetting(self, tokens: list[str]) -> str | None:
+        if tokens[1:3] == ["get", "model"]:
+            return f'systemsetting model "{self.state.model}"'
+        return None
+
+    def _handle_uptime(self, tokens: list[str]) -> str | None:
+        if tokens[1:] == ["get"]:
+            return self.state.uptime_text
         return None
 
 

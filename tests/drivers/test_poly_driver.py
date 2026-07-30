@@ -4,7 +4,7 @@ import pytest
 import pytest_asyncio
 
 from app.core.driver_base import CalendarEntry
-from app.drivers.poly.poly_driver import PolyDriver
+from app.drivers.poly.poly_driver import PolyDriver, _parse_uptime
 from app.simulator.poly_sim_server import PolySimServer, PolySSHSimServer
 
 
@@ -124,6 +124,13 @@ async def test_full_lifecycle_no_exceptions(sim_and_driver):
     await driver.reboot()
 
 
+async def test_get_status_includes_model_and_uptime(sim_and_driver):
+    _sim, driver = sim_and_driver
+    status = await driver.get_status()
+    assert status.model == "RealPresence Group 500 (SIM)"
+    assert status.uptime_seconds is not None
+
+
 def test_invalid_transport_raises_valueerror():
     with pytest.raises(ValueError):
         PolyDriver(host="127.0.0.1", transport="http")
@@ -155,3 +162,19 @@ async def test_ssh_full_lifecycle_no_exceptions(ssh_sim_and_driver):
     await driver.dial("1234")
     await driver.hangup()
     await driver.reboot()
+
+
+def test_parse_uptime_hours_and_minutes():
+    assert _parse_uptime("1 Hour, 10 Minutes") == 4200
+
+
+def test_parse_uptime_minutes_only():
+    assert _parse_uptime("45 Minutes") == 2700
+
+
+def test_parse_uptime_days_hours_minutes():
+    assert _parse_uptime("3 Days, 2 Hours, 5 Minutes") == 3 * 86400 + 2 * 3600 + 5 * 60
+
+
+def test_parse_uptime_unparseable_returns_none():
+    assert _parse_uptime("garbage response") is None

@@ -10,6 +10,7 @@ CiscoDriver와 동일하게 asyncio.to_thread로 감싸 사용한다.
 from __future__ import annotations
 
 import asyncio
+import re
 import socket
 from datetime import datetime, timezone
 
@@ -52,19 +53,32 @@ class PolyDriver(DeviceDriver):
         self._ssh_client: paramiko.SSHClient | None = None
         self._ssh_channel = None
         self._ssh_buffer = b""
+        self._model: str | None = None
 
     async def connect(self) -> None:
         if self.transport == "ssh":
             await asyncio.to_thread(self._connect_ssh_sync)
-            return
+        else:
+            try:
+                self._reader, self._writer = await asyncio.wait_for(
+                    telnetlib3.open_connection(self.host, self.port), timeout=self.timeout
+                )
+            except asyncio.TimeoutError as exc:
+                raise DriverTimeoutError(f"connect timeout: {self.host}:{self.port}") from exc
+            except OSError as exc:
+                raise DriverConnectionError(str(exc)) from exc
+        await self._fetch_model()
+
+    async def _fetch_model(self) -> None:
+        """모델명은 하드웨어가 바뀌지 않는 한 안 변하므로 연결 시 1회만 조회해 캐시한다.
+        조회 실패는 connect() 전체를 실패시키지 않는다(있으면 좋은 정보일 뿐)."""
         try:
-            self._reader, self._writer = await asyncio.wait_for(
-                telnetlib3.open_connection(self.host, self.port), timeout=self.timeout
-            )
-        except asyncio.TimeoutError as exc:
-            raise DriverTimeoutError(f"connect timeout: {self.host}:{self.port}") from exc
-        except OSError as exc:
-            raise DriverConnectionError(str(exc)) from exc
+            resp = await self._call(cmd.SYSTEMSETTING_GET_MODEL)
+        except DriverError:
+            return
+        match = re.search(r'"([^"]+)"', resp)
+        if match:
+            self._model = match.group(1)
 
     def _connect_ssh_sync(self) -> None:
         client = paramiko.SSHClient()
@@ -197,12 +211,22 @@ class PolyDriver(DeviceDriver):
                 if len(parts) > 2:
                     call_peer = parts[2]
 
+            # 모델명(_fetch_model)과 같은 이유로 개별 보호: uptime 조회 실패가 통화/음소거
+            # 등 나머지 상태 조회까지 offline으로 끌어내리지 않게 한다.
+            try:
+                uptime_resp = await self._call(cmd.UPTIME_GET)
+                uptime_seconds = _parse_uptime(uptime_resp)
+            except DriverError:
+                uptime_seconds = None
+
             return DeviceStatus(
                 online=True,
                 in_call=in_call,
                 muted=muted,
                 call_peer=call_peer,
                 last_polled_at=now,
+                model=self._model,
+                uptime_seconds=uptime_seconds,
             )
         except DriverError as exc:
             return DeviceStatus(
@@ -212,6 +236,7 @@ class PolyDriver(DeviceDriver):
                 call_peer=None,
                 last_polled_at=now,
                 error=str(exc),
+                model=self._model,
             )
 
     async def mute(self, on: bool) -> bool:
@@ -271,3 +296,21 @@ class PolyDriver(DeviceDriver):
             raise DriverCommandError("meeting has no dialable join_uri")
         resp = await self._call(cmd.dial_phone(entry.join_uri))
         return resp.startswith("dialing")
+
+
+_UPTIME_UNIT_SECONDS = {"day": 86400, "hour": 3600, "minute": 60, "second": 1}
+
+
+def _parse_uptime(text: str) -> int | None:
+    """Poly "uptime get" 응답("1 Hour, 10 Minutes" 형식)을 초로 환산한다.
+    Day 단위 표기가 실제로 포함되는지는 문서에 예시가 없어 미확인 — Day/Hour/Minute/Second를
+    느슨하게(대소문자 무관, 단수/복수 무관) 인식하고, 하나도 못 찾으면 None을 반환해
+    상위 계층이 원문을 그대로 보여줄 수 있게 한다."""
+    total = 0
+    found = False
+    for match in re.finditer(r"(\d+)\s*(day|hour|minute|second)s?", text, re.IGNORECASE):
+        found = True
+        value = int(match.group(1))
+        unit = match.group(2).lower()
+        total += value * _UPTIME_UNIT_SECONDS[unit]
+    return total if found else None

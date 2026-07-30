@@ -75,3 +75,10 @@ def calendarmeetings_list(start_time: str = "today", end_time: str | None = None
 
 def calendarmeetings_info(meeting_id: str) -> str:
     return f'calendarmeetings info "{meeting_id}"'
+
+
+# --- systemsetting model / uptime — 확인됨 (Integrator Reference Guide p.352, p.372) ---
+# systemsetting get model -> 응답: systemsetting model "RealPresence Group 700"
+SYSTEMSETTING_GET_MODEL = "systemsetting get model"
+# uptime get -> 응답: "1 Hour, 10 Minutes" (사람이 읽는 문자열, 명령어 자체가 최상위 커맨드)
+UPTIME_GET = "uptime get"
