@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 
 import paramiko
 import telnetlib3
+from cryptography.hazmat.primitives import hashes
 
 from app.core.driver_base import (
     CalendarEntry,
@@ -28,6 +29,31 @@ from app.core.driver_base import (
     DriverTimeoutError,
 )
 from . import poly_commands as cmd
+
+
+def _allow_legacy_ssh_rsa_hostkey() -> None:
+    """paramiko 5.x는 SHA-1 기반 구형 호스트키(ssh-rsa)를 기본 협상 목록에서 제외한다
+    (paramiko/transport.py Transport._key_info, _preferred_keys — "do not want ssh-rsa"
+    주석으로 의도적으로 뺀 것, 소스로 확인함). 그런데 Poly Group Series 실장비(RoomOS가
+    아닌 구형 Group Series SSH 스택)는 ssh-rsa만 제공하는 경우가 있어(2026-07-30 VDI
+    실장비 검증에서 `Incompatible ssh peer (no acceptable host key)`로 확인) 연결 자체가
+    안 된다.
+
+    협상 허용 목록(_key_info/_preferred_keys)만 고치면 안 된다 — RSAKey.HASHES에도
+    "ssh-rsa" -> SHA1 매핑이 빠져 있어서(paramiko/rsakey.py, SHA1 서명 생성/검증 로직
+    자체를 없앤 것), 협상은 통과해도 실제 호스트키 서명 검증 단계(verify_ssh_sig)에서
+    `sig_algorithm not in self.HASHES`로 조용히 실패한다 — 이 부분까지 같이 복구해야
+    실제로 연결된다(2026-07-30 자체 재현 테스트로 확인: 협상 목록만 고쳤을 때는
+    서명 단계에서 KeyError로 계속 실패함).
+
+    다른 암호/키교환/MAC 알고리즘은 그대로 최신 기본값을 유지한다 — ssh-rsa 호스트키
+    검증 경로 하나만 복구한다."""
+    if "ssh-rsa" not in paramiko.Transport._key_info:
+        paramiko.Transport._key_info["ssh-rsa"] = paramiko.RSAKey
+    if "ssh-rsa" not in paramiko.Transport._preferred_keys:
+        paramiko.Transport._preferred_keys = paramiko.Transport._preferred_keys + ("ssh-rsa",)
+    if "ssh-rsa" not in paramiko.RSAKey.HASHES:
+        paramiko.RSAKey.HASHES["ssh-rsa"] = hashes.SHA1
 
 
 class PolyDriver(DeviceDriver):
@@ -81,6 +107,7 @@ class PolyDriver(DeviceDriver):
             self._model = match.group(1)
 
     def _connect_ssh_sync(self) -> None:
+        _allow_legacy_ssh_rsa_hostkey()
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         try:

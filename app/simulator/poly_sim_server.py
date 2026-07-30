@@ -250,15 +250,30 @@ class PolySSHSimServer:
     API는 Telnet/SSH 접속 방식과 무관하게 동일하기 때문이다.
     """
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 2222) -> None:
+    def __init__(self, host: str = "127.0.0.1", port: int = 2222, restrict_to_ssh_rsa: bool = False) -> None:
+        """restrict_to_ssh_rsa=True면 호스트키 협상 시 ssh-rsa(SHA-1)만 제시한다 —
+        일부 실제 Poly Group Series 장비가 이 구형 알고리즘만 지원해서
+        (2026-07-30 VDI 실장비 검증에서 `Incompatible ssh peer` 확인) 그 제약을
+        재현하기 위한 테스트 전용 옵션. paramiko 5.x는 기본적으로 ssh-rsa를
+        협상 목록/서명 해시 매핑에서 뺐으므로(poly_driver._allow_legacy_ssh_rsa_hostkey
+        docstring 참고), 여기서도 같은 두 지점을 복구해야 서버가 실제로 ssh-rsa로
+        서명할 수 있다."""
         self.host = host
         self.port = port
+        self.restrict_to_ssh_rsa = restrict_to_ssh_rsa
         self._core = PolySimServer(host=host, port=0)
         self.state = self._core.state
         self._sock: socket.socket | None = None
         self._accept_thread: threading.Thread | None = None
         self._running = False
         self._host_key = paramiko.RSAKey.generate(2048)
+        if restrict_to_ssh_rsa:
+            if "ssh-rsa" not in paramiko.Transport._key_info:
+                paramiko.Transport._key_info["ssh-rsa"] = paramiko.RSAKey
+            if "ssh-rsa" not in paramiko.RSAKey.HASHES:
+                from cryptography.hazmat.primitives import hashes
+
+                paramiko.RSAKey.HASHES["ssh-rsa"] = hashes.SHA1
 
     def start(self) -> None:
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -289,6 +304,8 @@ class PolySSHSimServer:
 
     def _handle_client(self, client_sock: socket.socket) -> None:
         transport = paramiko.Transport(client_sock)
+        if self.restrict_to_ssh_rsa:
+            transport.get_security_options().key_types = ["ssh-rsa"]
         transport.add_server_key(self._host_key)
         server = _PolyServerInterface()
         try:

@@ -193,6 +193,27 @@ async def test_ssh_full_lifecycle_no_exceptions(ssh_sim_and_driver):
     await driver.reboot()
 
 
+async def test_ssh_connects_to_device_offering_only_legacy_ssh_rsa_hostkey():
+    """2026-07-30 VDI 실장비 검증에서 확인된 문제의 회귀 테스트: 일부 Poly Group
+    Series 실장비는 SSH 호스트키로 ssh-rsa(SHA-1)만 제시하는데, paramiko 5.x는
+    기본적으로 이를 협상 목록/서명 해시 매핑 양쪽에서 빼버려 연결 자체가 실패한다
+    (`Incompatible ssh peer (no acceptable host key)`). PolyDriver.connect()가
+    이 제약이 있는 장비에도 정상 접속되는지 확인한다."""
+    sim = PolySSHSimServer(host="127.0.0.1", port=0, restrict_to_ssh_rsa=True)
+    await asyncio.to_thread(sim.start)
+
+    driver = PolyDriver(
+        host="127.0.0.1", port=sim.port, timeout=3.0, transport="ssh", username="admin", password="pw"
+    )
+    try:
+        await driver.connect()
+        status = await driver.get_status()
+        assert status.online is True
+    finally:
+        await driver.disconnect()
+        await asyncio.to_thread(sim.stop)
+
+
 def test_parse_uptime_hours_and_minutes():
     assert _parse_uptime("1 Hour, 10 Minutes") == 4200
 
