@@ -19,6 +19,8 @@ class Device:
     group: str
     credential_ref: str
     is_simulated: bool = False
+    model: str | None = None
+    teams_tenant_address: str | None = None
 
     def __post_init__(self) -> None:
         if self.vendor not in VALID_VENDORS:

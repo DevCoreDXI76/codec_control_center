@@ -120,3 +120,37 @@ def test_reads_legacy_file_without_schema_version(tmp_path):
     legacy = json.dumps({"devices": []}, ensure_ascii=False).encode("utf-8")
     path.write_bytes(dpapi.protect(legacy, _ENTROPY))
     assert DeviceRegistry(path).list_devices() == []
+
+
+def test_model_defaults_to_none(registry):
+    device = _add_sample(registry)
+    assert device.model is None
+
+
+def test_teams_tenant_address_can_be_set(registry):
+    device = _add_sample(registry, teams_tenant_address="vc.poscodx.com")
+    assert device.teams_tenant_address == "vc.poscodx.com"
+    assert registry.get_device(device.id).teams_tenant_address == "vc.poscodx.com"
+
+
+def test_update_device_sets_model(registry):
+    device = _add_sample(registry)
+    updated = registry.update_device(device.id, model="RealPresence Group 700")
+    assert updated.model == "RealPresence Group 700"
+    assert registry.get_device(device.id).model == "RealPresence Group 700"
+
+
+def test_reads_legacy_device_without_model_field(tmp_path):
+    path = tmp_path / "devices.enc.json"
+    legacy_device = {
+        "id": "legacy-1", "name": "구버전 장비", "vendor": "poly", "connection_type": "telnet",
+        "host": "127.0.0.1", "port": 2323, "group": "3F", "credential_ref": "ref-1",
+        "is_simulated": True,
+    }
+    payload = json.dumps({"schema_version": SCHEMA_VERSION, "devices": [legacy_device]}, ensure_ascii=False).encode("utf-8")
+    path.write_bytes(dpapi.protect(payload, _ENTROPY))
+
+    devices = DeviceRegistry(path).list_devices()
+    assert len(devices) == 1
+    assert devices[0].model is None
+    assert devices[0].teams_tenant_address is None

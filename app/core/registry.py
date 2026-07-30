@@ -50,6 +50,7 @@ class DeviceRegistry:
         group: str,
         credential_ref: str,
         is_simulated: bool = False,
+        teams_tenant_address: str | None = None,
     ) -> Device:
         device = Device(
             id=str(uuid.uuid4()),
@@ -61,6 +62,7 @@ class DeviceRegistry:
             group=group,
             credential_ref=credential_ref,
             is_simulated=is_simulated,
+            teams_tenant_address=teams_tenant_address,
         )
         devices = self._read()
         devices.append(device)
