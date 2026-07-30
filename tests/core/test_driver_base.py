@@ -95,3 +95,18 @@ def test_calendar_entry_fields():
 
 def test_driver_error_hierarchy():
     assert issubclass(DriverConnectionError, DriverError)
+
+
+def test_device_status_model_and_uptime_default_to_none():
+    status = DeviceStatus(online=True, in_call=False, muted=False, call_peer=None, last_polled_at="now")
+    assert status.model is None
+    assert status.uptime_seconds is None
+
+
+def test_device_status_accepts_model_and_uptime():
+    status = DeviceStatus(
+        online=True, in_call=False, muted=False, call_peer=None, last_polled_at="now",
+        model="RealPresence Group 700", uptime_seconds=3660,
+    )
+    assert status.model == "RealPresence Group 700"
+    assert status.uptime_seconds == 3660

@@ -17,6 +17,8 @@ class DeviceStatus:
     call_peer: str | None
     last_polled_at: str
     error: str | None = None
+    model: str | None = None
+    uptime_seconds: int | None = None
 
 
 @dataclass
