@@ -21,6 +21,22 @@
     </nav>
 
     <main class="main">
+      <div class="log-tabs">
+        <a href="/logs" class="{{ 'active' if view == 'control' else '' }}">제어 로그</a>
+        <a href="/logs/system" class="{{ 'active' if view == 'system' else '' }}">시스템 로그</a>
+      </div>
+
+      {% if view == 'system' %}
+      <h2>시스템 로그</h2>
+      {% if log_lines %}
+      <pre class="app-log-view">{% for line in log_lines %}{{ line }}
+{% endfor %}</pre>
+      {% else %}
+      <div class="empty-state">
+        <p>아직 기록된 시스템 로그가 없습니다.</p>
+      </div>
+      {% endif %}
+      {% else %}
       <h2>제어 이력</h2>
       {% if entries %}
       <div class="log-table-wrap">
@@ -57,6 +73,7 @@
       <div class="empty-state">
         <p>아직 기록된 제어 이력이 없습니다.</p>
       </div>
+      {% endif %}
       {% endif %}
     </main>
   </div>

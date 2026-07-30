@@ -17,6 +17,7 @@ def client(tmp_path):
         driver_factory=build_driver_factory(app.state.registry, app.state.vault)
     )
     app.state.history = ControlHistory(tmp_path / "history.sqlite3")
+    app.state.app_log_path = tmp_path / "app.log"
     return TestClient(app)
 
 
@@ -62,3 +63,33 @@ def test_logs_page_renders_entries(client):
     assert "3층 대회의실" in resp.text
     assert "mute" in resp.text
     assert "성공" in resp.text
+
+
+def test_system_log_page_renders_empty_state(client):
+    resp = client.get("/logs/system")
+    assert resp.status_code == 200
+    assert "아직 기록된 시스템 로그가 없습니다" in resp.text
+
+
+def test_system_log_page_renders_lines_newest_first(client):
+    app.state.app_log_path.write_text(
+        "2026-07-30 10:00:00 INFO app: first\n2026-07-30 10:00:01 WARNING app: second\n",
+        encoding="utf-8",
+    )
+    resp = client.get("/logs/system")
+    assert resp.status_code == 200
+    assert resp.text.index("second") < resp.text.index("first")  # 최신 줄이 위로
+
+
+def test_logs_page_shows_control_tab_active(client):
+    resp = client.get("/logs")
+    assert resp.status_code == 200
+    assert '<a href="/logs" class="active">제어 로그</a>' in resp.text
+    assert '<a href="/logs/system" class="">시스템 로그</a>' in resp.text
+
+
+def test_system_log_page_shows_system_tab_active(client):
+    resp = client.get("/logs/system")
+    assert resp.status_code == 200
+    assert '<a href="/logs" class="">제어 로그</a>' in resp.text
+    assert '<a href="/logs/system" class="active">시스템 로그</a>' in resp.text

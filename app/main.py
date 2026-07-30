@@ -21,6 +21,7 @@ from app.api.routes_settings import router as settings_router
 from app.api.routes_teams import router as teams_router
 from app.api.ws_status import StatusBroadcaster
 from app.api.ws_status import router as ws_status_router
+from app.core.applog import tail_app_log
 from app.core.driver_factory import build_driver_factory
 from app.core.history import ControlHistory
 from app.core.polling import PollingScheduler
@@ -67,7 +68,8 @@ def _configure_logging(log_path: Path) -> None:
 
 
 APP_DIR, TEMPLATES_DIR, STATIC_DIR, DATA_DIR = _resolve_paths()
-_configure_logging(DATA_DIR / "app.log")
+APP_LOG_PATH = DATA_DIR / "app.log"
+_configure_logging(APP_LOG_PATH)
 
 
 @asynccontextmanager
@@ -89,6 +91,7 @@ app.state.broadcaster = StatusBroadcaster()
 app.state.settings_store = SettingsStore(DATA_DIR / "settings.json")
 app.state.settings = app.state.settings_store.load()
 app.state.history = ControlHistory(DATA_DIR / "history.sqlite3")
+app.state.app_log_path = APP_LOG_PATH
 
 def _device_label(device_id: str) -> str:
     """로그용 — device_id(uuid) 대신 사람이 알아볼 수 있는 장비 이름을 남긴다."""
@@ -155,4 +158,10 @@ async def settings_page(request: Request):
 @app.get("/logs")
 async def logs_page(request: Request):
     entries = request.app.state.history.list_recent(limit=200)
-    return templates.TemplateResponse(request, "logs.html", {"entries": entries})
+    return templates.TemplateResponse(request, "logs.html", {"view": "control", "entries": entries})
+
+
+@app.get("/logs/system")
+async def system_log_page(request: Request):
+    log_lines = tail_app_log(request.app.state.app_log_path)
+    return templates.TemplateResponse(request, "logs.html", {"view": "system", "log_lines": log_lines})
