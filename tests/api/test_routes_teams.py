@@ -11,6 +11,7 @@ from app.core.driver_base import (
 from app.core.history import ControlHistory
 from app.core.polling import PollingScheduler
 from app.core.registry import DeviceRegistry
+from app.core.settings import AppSettings
 from app.core.vault import CredentialVault
 from app.main import app
 
@@ -22,6 +23,7 @@ class FakeTeamsDriver(DeviceDriver):
     def __init__(self, calendar_supported: bool = True) -> None:
         self.calendar_supported = calendar_supported
         self.joined_entry: CalendarEntry | None = None
+        self.dialed_address: str | None = None
 
     async def connect(self) -> None:
         pass
@@ -36,6 +38,7 @@ class FakeTeamsDriver(DeviceDriver):
         return True
 
     async def dial(self, address: str) -> bool:
+        self.dialed_address = address
         return True
 
     async def hangup(self) -> bool:
@@ -78,7 +81,7 @@ def client(tmp_path):
     return TestClient(app)
 
 
-def _register(client, calendar_supported: bool = True) -> tuple[str, FakeTeamsDriver]:
+def _register(client, calendar_supported: bool = True, teams_tenant_address: str | None = None) -> tuple[str, FakeTeamsDriver]:
     credential_ref = app.state.vault.store('{"username":"admin","password":"pw"}')
     device = app.state.registry.add_device(
         name="테스트 회의실",
@@ -89,6 +92,7 @@ def _register(client, calendar_supported: bool = True) -> tuple[str, FakeTeamsDr
         group="TEST",
         credential_ref=credential_ref,
         is_simulated=True,
+        teams_tenant_address=teams_tenant_address,
     )
     fake_driver = FakeTeamsDriver(calendar_supported=calendar_supported)
     app.state.scheduler = PollingScheduler(driver_factory=lambda device_id: fake_driver)
@@ -158,3 +162,51 @@ def test_join_meeting_without_uri_returns_502(client):
         json={"subject": "미확정 회의", "start_time": "x", "end_time": "y", "join_uri": None},
     )
     assert resp.status_code == 502
+
+
+def test_direct_dial_uses_device_tenant_override(client):
+    device_id, driver = _register(client, teams_tenant_address="room.vc.poscodx.com")
+    resp = client.post(f"/api/devices/{device_id}/direct-dial", json={"meeting_id": "1234567890"})
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True, "address": "1234567890@room.vc.poscodx.com"}
+    assert driver.dialed_address == "1234567890@room.vc.poscodx.com"
+
+
+def test_direct_dial_falls_back_to_global_tenant(client):
+    app.state.settings_store.save(AppSettings(teams_tenant_address="vc.poscodx.com"))
+    app.state.settings = app.state.settings_store.load()
+    device_id, _driver = _register(client)
+    resp = client.post(f"/api/devices/{device_id}/direct-dial", json={"meeting_id": "1234567890"})
+    assert resp.status_code == 200
+    assert resp.json()["address"] == "1234567890@vc.poscodx.com"
+
+
+def test_direct_dial_rejects_non_10_digit_meeting_id(client):
+    device_id, _driver = _register(client, teams_tenant_address="vc.poscodx.com")
+    resp = client.post(f"/api/devices/{device_id}/direct-dial", json={"meeting_id": "12345"})
+    assert resp.status_code == 422
+
+
+def test_direct_dial_rejects_meeting_id_with_trailing_newline(client):
+    # Python's re `$` matches just before a trailing "\n", so a naive `^\d{10}$`
+    # would accept "1234567890\n" and let a newline slip into the address that
+    # gets interpolated raw into the device's command line (telnet/SSH).
+    device_id, _driver = _register(client, teams_tenant_address="vc.poscodx.com")
+    resp = client.post(f"/api/devices/{device_id}/direct-dial", json={"meeting_id": "1234567890\n"})
+    assert resp.status_code == 422
+
+
+def test_direct_dial_without_any_tenant_configured_returns_422(client):
+    app.state.settings = AppSettings(teams_tenant_address="")
+    device_id, _driver = _register(client)
+    resp = client.post(f"/api/devices/{device_id}/direct-dial", json={"meeting_id": "1234567890"})
+    assert resp.status_code == 422
+
+
+def test_direct_dial_logs_to_history(client):
+    device_id, _driver = _register(client, teams_tenant_address="vc.poscodx.com")
+    client.post(f"/api/devices/{device_id}/direct-dial", json={"meeting_id": "1234567890"})
+    entries = app.state.history.list_recent()
+    assert len(entries) == 1
+    assert entries[0].action == "direct_dial"
+    assert entries[0].success is True

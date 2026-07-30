@@ -11,6 +11,7 @@ get_obtp_entries(회의 상세)는 Bookings List/Get 응답의 정확한 텍스�
 from __future__ import annotations
 
 import dataclasses
+import re
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -28,6 +29,13 @@ class JoinRequest(BaseModel):
     start_time: str
     end_time: str
     join_uri: str | None = None
+
+
+class DirectDialRequest(BaseModel):
+    meeting_id: str
+
+
+_MEETING_ID_RE = re.compile(r"^\d{10}\Z")
 
 
 def _get_scheduler(request: Request) -> PollingScheduler:
@@ -86,3 +94,30 @@ async def join_meeting(device_id: str, payload: JoinRequest, request: Request) -
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     history.log(device_id=device_id, device_name=device_name, action="join", success=ok, detail=payload.subject)
     return {"ok": ok}
+
+
+@router.post("/{device_id}/direct-dial")
+async def direct_dial(device_id: str, payload: DirectDialRequest, request: Request) -> dict:
+    if not _MEETING_ID_RE.match(payload.meeting_id):
+        raise HTTPException(status_code=422, detail="회의 ID는 숫자 10자리여야 합니다")
+
+    registry: DeviceRegistry = request.app.state.registry
+    device = registry.get_device(device_id)
+    if device is None:
+        raise HTTPException(status_code=404, detail="device not found")
+
+    tenant = device.teams_tenant_address or request.app.state.settings.teams_tenant_address
+    if not tenant:
+        raise HTTPException(status_code=422, detail="Teams 테넌트 주소가 설정되지 않았습니다")
+
+    address = f"{payload.meeting_id}@{tenant}"
+    driver = await _get_driver(request, device_id)
+    history: ControlHistory = request.app.state.history
+
+    try:
+        ok = await driver.dial(address)
+    except DriverError as exc:
+        history.log(device_id=device_id, device_name=device.name, action="direct_dial", success=False, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    history.log(device_id=device_id, device_name=device.name, action="direct_dial", success=ok, detail=address)
+    return {"ok": ok, "address": address}
