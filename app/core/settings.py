@@ -15,6 +15,7 @@ _DEFAULTS = {
     "max_concurrency": 8,
     "command_timeout": 7.0,
     "open_browser_on_start": True,
+    "teams_tenant_address": "",
 }
 
 SCHEMA_VERSION = 1
@@ -28,6 +29,7 @@ class AppSettings:
     max_concurrency: int = 8
     command_timeout: float = 7.0
     open_browser_on_start: bool = True
+    teams_tenant_address: str = ""
 
     def __post_init__(self) -> None:
         if not (1.0 <= self.poll_interval <= 300.0):

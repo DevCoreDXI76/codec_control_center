@@ -75,3 +75,13 @@ def test_load_legacy_file_without_schema_version(tmp_path):
     path.write_text(json.dumps({"poll_interval": 25.0}), encoding="utf-8")
     settings = SettingsStore(path).load()
     assert settings.poll_interval == 25.0
+
+
+def test_teams_tenant_address_defaults_to_empty_string():
+    assert AppSettings().teams_tenant_address == ""
+
+
+def test_save_and_load_roundtrip_includes_teams_tenant_address(tmp_path):
+    store = SettingsStore(tmp_path / "settings.json")
+    store.save(AppSettings(teams_tenant_address="vc.poscodx.com"))
+    assert store.load().teams_tenant_address == "vc.poscodx.com"

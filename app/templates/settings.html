@@ -29,6 +29,7 @@
           max_concurrency: {{ settings.max_concurrency }},
           command_timeout: {{ settings.command_timeout }},
           open_browser_on_start: {{ 'true' if settings.open_browser_on_start else 'false' }},
+          teams_tenant_address: '{{ settings.teams_tenant_address }}',
           saving: false,
           error: '',
           saved: false,
@@ -44,6 +45,7 @@
                 max_concurrency: Number(this.max_concurrency),
                 command_timeout: Number(this.command_timeout),
                 open_browser_on_start: this.open_browser_on_start,
+                teams_tenant_address: this.teams_tenant_address,
               }),
             });
             this.saving = false;
@@ -77,6 +79,10 @@
           </div>
           <div class="field">
             <label><input type="checkbox" x-model="open_browser_on_start" /> 시작 시 자동으로 브라우저 열기</label>
+          </div>
+          <div class="field">
+            <label>Teams 테넌트 주소 (CVI, 예: vc.poscodx.com)</label>
+            <input type="text" x-model="teams_tenant_address" placeholder="vc.poscodx.com" />
           </div>
           <p class="error-text" x-show="error" x-text="error"></p>
           <p class="meta" x-show="saved" style="color: var(--color-online)">저장되었습니다.</p>

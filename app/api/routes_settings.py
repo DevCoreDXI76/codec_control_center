@@ -17,6 +17,7 @@ class SettingsUpdateRequest(BaseModel):
     max_concurrency: int
     command_timeout: float
     open_browser_on_start: bool
+    teams_tenant_address: str = ""
 
 
 def _get_store(request: Request) -> SettingsStore:

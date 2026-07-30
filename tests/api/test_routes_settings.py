@@ -67,6 +67,24 @@ def test_update_settings_out_of_range_returns_422(client):
     assert resp.status_code == 422
 
 
+def test_update_settings_persists_teams_tenant_address(client):
+    resp = client.put(
+        "/api/settings",
+        json={
+            "poll_interval": 15.0,
+            "max_concurrency": 8,
+            "command_timeout": 7.0,
+            "open_browser_on_start": True,
+            "teams_tenant_address": "vc.poscodx.com",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["teams_tenant_address"] == "vc.poscodx.com"
+
+    resp2 = client.get("/api/settings")
+    assert resp2.json()["teams_tenant_address"] == "vc.poscodx.com"
+
+
 def test_settings_page_renders(client):
     from app.__version__ import __version__
 
