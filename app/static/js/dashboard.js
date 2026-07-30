@@ -239,27 +239,42 @@ function deviceForm() {
   };
 }
 
+const deviceMeetingsCache = new Map();
+
+async function fetchDeviceMeetings(deviceId) {
+  try {
+    const resp = await fetch(`/api/devices/${deviceId}/obtp`);
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    if (!data.supported) return [];
+    const now = new Date().toISOString();
+    const upcoming = data.entries.filter((entry) => entry.start_time >= now || entry.end_time >= now);
+    upcoming.sort((a, b) => a.start_time.localeCompare(b.start_time));
+    return upcoming;
+  } catch (e) {
+    return [];
+  }
+}
+
+function formatMeetingTime(isoString) {
+  return isoString.replace("T", " ").slice(11, 16);
+}
+
 async function loadUpcomingMeetings() {
   const container = document.getElementById("meetings-list");
-  if (!container) return;
-
   const rows = [];
+
   for (const card of document.querySelectorAll(".device-card")) {
     const deviceId = card.dataset.deviceId;
     const nameEl = card.querySelector("h3");
     const deviceName = nameEl ? nameEl.firstChild.textContent.trim() : deviceId;
-    try {
-      const resp = await fetch(`/api/devices/${deviceId}/obtp`);
-      if (!resp.ok) continue;
-      const data = await resp.json();
-      if (data.supported) {
-        for (const entry of data.entries) rows.push({ deviceId, deviceName, entry });
-      }
-    } catch (e) {
-      // 개별 장비 조회 실패는 무시하고 나머지는 계속 표시
-    }
+    const entries = await fetchDeviceMeetings(deviceId);
+    deviceMeetingsCache.set(deviceId, entries);
+    for (const entry of entries) rows.push({ deviceId, deviceName, entry });
+    renderCardTeamsSection(deviceId, entries);
   }
 
+  if (!container) return;
   container.textContent = "";
   if (rows.length === 0) {
     const p = document.createElement("p");
@@ -276,7 +291,7 @@ async function loadUpcomingMeetings() {
     div.className = "meeting-row";
 
     const time = document.createElement("span");
-    time.textContent = row.entry.start_time.replace("T", " ").slice(0, 16);
+    time.textContent = formatMeetingTime(row.entry.start_time);
     div.appendChild(time);
 
     const name = document.createElement("span");
@@ -288,11 +303,13 @@ async function loadUpcomingMeetings() {
     div.appendChild(subject);
 
     if (row.entry.join_uri) {
-      const btn = document.createElement("button");
-      btn.className = "btn btn-primary";
-      btn.textContent = "참가▶";
-      btn.addEventListener("click", () => joinMeeting(row.deviceId, row.entry, btn));
-      div.appendChild(btn);
+      const link = document.createElement("a");
+      link.href = "#";
+      link.className = "meeting-link";
+      link.textContent = row.entry.join_uri;
+      link.title = "참여하기";
+      link.addEventListener("click", (ev) => joinMeetingLink(ev, row.deviceId, row.entry));
+      div.appendChild(link);
     } else {
       const span = document.createElement("span");
       span.className = "meta";
@@ -304,14 +321,17 @@ async function loadUpcomingMeetings() {
   }
 }
 
-async function joinMeeting(deviceId, entry, btn) {
-  btn.disabled = true;
+async function joinMeetingLink(ev, deviceId, entry) {
+  ev.preventDefault();
   const ok = await callControl(deviceId, "join", entry);
-  btn.disabled = false;
   if (ok) {
-    showToast("참가 명령 전송됨");
+    showToast(`"${entry.subject}" 참가 명령 전송됨`);
     await refreshStatus(deviceId);
   }
+}
+
+function renderCardTeamsSection(deviceId, entries) {
+  // Task 14에서 실제 렌더링으로 교체됨
 }
 
 document.addEventListener("DOMContentLoaded", () => {
