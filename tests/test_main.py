@@ -14,6 +14,16 @@ def test_health_check():
     assert response.json() == {"status": "ok", "version": __version__}
 
 
+def test_guide_page():
+    client = TestClient(app)
+    response = client.get("/guide")
+    assert response.status_code == 200
+    assert "가이드 - BridgeX" in response.text
+    assert 'id="devices"' in response.text
+    assert 'id="troubleshooting"' in response.text
+    assert '8765' in response.text  # 포트 충돌 트러블슈팅 안내
+
+
 def test_resolve_paths_dev_mode():
     from app.main import _resolve_paths
 

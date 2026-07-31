@@ -118,6 +118,13 @@ body {
   background: var(--color-card-bg);
   border-right: 1px solid var(--color-border);
   padding: 1rem 0;
+  display: flex;
+  flex-direction: column;
+  align-self: flex-start; /* .main이 뷰포트보다 길 때(가이드 화면) 사이드바가 같이 늘어나 "맨
+    아래" 링크가 페이지 끝으로 밀려나는 것을 방지 */
+  height: calc(100vh - 53px);
+  position: sticky;
+  top: 0;
 }
 
 .sidebar a {
@@ -126,6 +133,12 @@ body {
   color: var(--color-text);
   text-decoration: none;
   font-size: 0.92rem;
+}
+
+.sidebar a.sidebar-guide-link {
+  margin-top: auto;
+  border-top: 1px solid var(--color-border);
+  padding-top: 0.75rem;
 }
 
 .sidebar a.active,
@@ -749,4 +762,138 @@ body {
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* 가이드 화면 (2026-07-31) */
+.guide-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 2rem;
+}
+
+.guide-toc {
+  width: 190px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 1.25rem;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+}
+
+.guide-toc h2 {
+  margin: 0 0 0.6rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+.guide-toc ol {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+}
+
+.guide-toc a {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.guide-toc a:hover {
+  text-decoration: underline;
+}
+
+.guide-content {
+  flex: 1;
+  min-width: 0;
+  max-width: 68ch;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 1.5rem 1.75rem;
+}
+
+.guide-content section {
+  scroll-margin-top: 4.5rem;
+}
+
+.guide-content section + section {
+  margin-top: 2.25rem;
+  padding-top: 2.25rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.guide-content h2 {
+  margin: 0 0 0.9rem;
+  font-size: 1.15rem;
+}
+
+.guide-content h3 {
+  font-size: 0.98rem;
+  margin: 1.25rem 0 0.5rem;
+}
+
+.guide-content p {
+  line-height: 1.7;
+  font-size: 0.92rem;
+  margin: 0.5rem 0;
+}
+
+.guide-content ul,
+.guide-content ol {
+  line-height: 1.7;
+  font-size: 0.92rem;
+  padding-left: 1.3rem;
+}
+
+.guide-content li {
+  margin: 0.3rem 0;
+}
+
+.guide-content code {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.85em;
+  font-family: "Consolas", "Courier New", monospace;
+}
+
+.guide-content kbd {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 0.05rem 0.45rem;
+  font-size: 0.85em;
+  font-family: inherit;
+}
+
+.guide-callout {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-call);
+  border-radius: 6px;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.88rem;
+  margin: 0.75rem 0;
+}
+
+.guide-callout.warn {
+  border-left-color: var(--color-warn);
+}
+
+@media (max-width: 760px) {
+  .guide-wrap {
+    flex-direction: column;
+  }
+
+  .guide-toc {
+    position: static;
+    width: auto;
+  }
 }

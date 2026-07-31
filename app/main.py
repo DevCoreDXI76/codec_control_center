@@ -165,3 +165,8 @@ async def logs_page(request: Request):
 async def system_log_page(request: Request):
     log_lines = tail_app_log(request.app.state.app_log_path)
     return templates.TemplateResponse(request, "logs.html", {"view": "system", "log_lines": log_lines})
+
+
+@app.get("/guide")
+async def guide_page(request: Request):
+    return templates.TemplateResponse(request, "guide.html", {})

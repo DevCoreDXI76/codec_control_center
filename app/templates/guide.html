@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>가이드 - BridgeX</title>
+  <link rel="icon" href="/static/img/favicon.ico" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <script src="/static/js/theme.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1 class="brand">
+      <img class="brand-mark" src="/static/img/coredxi-mark.png" alt="coredxi" />
+      <span class="brand-word">BridgeX</span>
+    </h1>
+    <button id="theme-toggle" class="theme-toggle-btn" type="button" title="다크모드 전환">🌙</button>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar">
+      <a href="/">대시보드</a>
+      <a href="/settings">설정</a>
+      <a href="/logs">로그</a>
+      <a class="active sidebar-guide-link" href="/guide">가이드</a>
+    </nav>
+
+    <main class="main">
+      <div class="guide-wrap">
+        <nav class="guide-toc" aria-label="가이드 목차">
+          <h2>목차</h2>
+          <ol>
+            <li><a href="#start">시작하기</a></li>
+            <li><a href="#devices">장비 등록</a></li>
+            <li><a href="#daily">일상 사용</a></li>
+            <li><a href="#teams">Teams 연동</a></li>
+            <li><a href="#settings">설정</a></li>
+            <li><a href="#troubleshooting">문제 해결</a></li>
+            <li><a href="#appendix">부록</a></li>
+          </ol>
+        </nav>
+
+        <div class="guide-content">
+          <section id="start">
+            <h2>1. 시작하기</h2>
+            <p>
+              BridgeX는 여러 회의실의 Poly·Cisco 영상회의 코덱을 하나의 화면에서 등록하고,
+              상태를 확인하고, 원격으로 제어할 수 있는 프로그램입니다. 별도 설치 프로그램이나
+              인터넷 연결 없이, 실행 파일(exe) 하나로 동작합니다.
+            </p>
+            <h3>실행하기</h3>
+            <ul>
+              <li>배포받은 <code>BridgeX-vX.Y.Z.exe</code>를 더블클릭하면 콘솔 창이 뜨면서
+                서버가 켜지고, 잠시 후 기본 웹 브라우저가 자동으로 열립니다.</li>
+              <li>브라우저가 자동으로 안 열려도 걱정하지 마세요 — 주소창에
+                <code>http://127.0.0.1:8765</code>를 직접 입력해도 동일한 화면이 열립니다.</li>
+              <li>콘솔 창은 실행 중 계속 떠 있어야 하는 창입니다. 닫으면 프로그램도 함께 종료됩니다.</li>
+            </ul>
+            <div class="guide-callout">
+              모든 데이터(등록한 장비 목록, 설정값)는 exe 파일과 같은 위치의 <code>data</code>
+              폴더에 저장됩니다. 인터넷이나 별도 서버로 전송되지 않는, 이 PC 안에서만 동작하는
+              프로그램입니다.
+            </div>
+          </section>
+
+          <section id="devices">
+            <h2>2. 장비 등록</h2>
+            <p>대시보드 화면 오른쪽 위의 <strong>+ 장비 등록</strong> 버튼을 누르면 등록 창이 열립니다.</p>
+            <ul>
+              <li><strong>이름</strong>: 화면에 표시할 이름 (예: "3층 대회의실")</li>
+              <li><strong>제조사</strong>: Poly 또는 Cisco</li>
+              <li><strong>연결 방식</strong>: SSH 또는 Telnet — 장비 사양에 맞는 쪽을 선택합니다.
+                잘못 선택하면 연결이 안 될 수 있습니다.</li>
+              <li><strong>IP 주소 / 포트</strong>: 장비의 관리 접속 정보</li>
+              <li><strong>계정 정보</strong>: 장비 로그인 아이디/비밀번호 — 이 PC에 암호화되어
+                저장됩니다.</li>
+              <li><strong>그룹</strong>(선택): 층·건물 등으로 묶어서 나중에 일괄 제어할 때 씁니다.</li>
+            </ul>
+            <div class="guide-callout">
+              등록 직후에는 상태가 잠시 "미확인"으로 보입니다. 등록하자마자 바로 접속을 시도하지
+              않고, 다음 상태 확인 주기(기본 몇 초~몇십 초)가 돌아왔을 때 처음 접속하기 때문입니다
+              — 정상 동작이니 조금만 기다려 주세요.
+            </div>
+          </section>
+
+          <section id="daily">
+            <h2>3. 일상 사용</h2>
+            <h3>카드에서 바로 하는 것들</h3>
+            <p>각 장비는 카드 형태로 표시되며, 카드 테두리 색으로 상태를 바로 알 수 있습니다
+              (초록=온라인, 파랑=통화중, 빨강=오류). 카드의 아이콘 버튼으로 다음을 할 수 있습니다.</p>
+            <ul>
+              <li><strong>음소거 / 음소거 해제</strong> — 마이크 아이콘 클릭</li>
+              <li><strong>통화 종료</strong> — 통화 중일 때만 활성화</li>
+              <li><strong>재부팅</strong> — 확인 창이 한 번 더 뜹니다. <strong>회의실 사용 중에는
+                누르지 마세요</strong> — 즉시 통화가 끊깁니다.</li>
+              <li><strong>새로고침</strong> — 다음 자동 확인을 기다리지 않고 지금 바로 상태를
+                다시 확인합니다.</li>
+              <li><strong>✎ (수정)</strong> — 등록 정보 수정, 장비 삭제도 이 안에 있습니다.</li>
+            </ul>
+            <h3>여러 대 한 번에 제어</h3>
+            <p>장비를 그룹으로 등록해뒀다면, 대시보드 상단의 그룹 탭에서 층/건물 단위로 필터링하고
+              일괄 음소거·재부팅을 할 수 있습니다.</p>
+            <h3>모델명 · 마지막 재부팅</h3>
+            <p>카드에는 장비 모델명과 마지막으로 재부팅한 지 얼마나 지났는지도 자동으로 표시됩니다.
+              30일 이상 재부팅하지 않은 장비는 ⚠ 표시로 알려줍니다.</p>
+          </section>
+
+          <section id="teams">
+            <h2>4. Teams 연동</h2>
+            <h3>오늘 예정된 회의</h3>
+            <p>장비가 캘린더에 등록되어 있으면, 카드에 오늘 남은 회의 목록이 시간순으로 표시됩니다.
+              회의 링크를 클릭하면 그 자리에서 바로 참가 명령을 보냅니다.</p>
+            <h3>회의 ID로 직접 참가</h3>
+            <p>캘린더 자동 연동이 안 되는 상황을 위한 보조 수단입니다. 카드의 다이얼 입력란에
+              회의 ID(10자리 숫자)를 입력하고 <kbd>Enter</kbd>를 누르면, 설정된 Teams 주소로
+              바로 다이얼합니다.</p>
+          </section>
+
+          <section id="settings">
+            <h2>5. 설정</h2>
+            <p>왼쪽 메뉴의 <strong>설정</strong>에서 다음 값을 바꿀 수 있습니다. 값을 바꾸면 즉시
+              저장되고, 프로그램을 다시 켜도 유지됩니다.</p>
+            <ul>
+              <li><strong>폴링 주기</strong> — 장비 상태를 얼마나 자주 확인할지(초 단위)</li>
+              <li><strong>동시 접속 제한</strong> — 한 번에 몇 대까지 동시에 접속할지</li>
+              <li><strong>명령 타임아웃</strong> — 장비 응답을 몇 초까지 기다릴지</li>
+              <li><strong>시작 시 브라우저 자동 열기</strong> — 꺼두면 exe 실행 시 브라우저가
+                자동으로 열리지 않습니다.</li>
+              <li><strong>Teams 테넌트 주소</strong> — 회의 ID 직접 다이얼에 쓰이는 기본 주소.
+                장비별로 다른 주소가 필요하면 장비 수정 창에서 개별 설정도 가능합니다.</li>
+            </ul>
+          </section>
+
+          <section id="troubleshooting">
+            <h2>6. 문제 해결</h2>
+            <h3>브라우저가 자동으로 안 열리거나, "사이트에 연결할 수 없음"이 뜬다</h3>
+            <p>이 PC에서 다른 프로그램이 이미 8765번 포트를 쓰고 있으면 서버가 켜지지 못합니다.
+              콘솔 창에 오류 메시지가 남아 있는지 먼저 확인해 주세요. 창을 닫고 PC를 재시작한 뒤
+              다시 실행해보는 것으로 대부분 해결됩니다. 반복된다면 담당 개발팀에 콘솔 창의 오류
+              내용을 그대로 전달해 주세요.</p>
+            <h3>장비가 계속 "오류" 또는 "오프라인"으로 보인다</h3>
+            <ul>
+              <li>IP 주소·포트가 맞는지, 장비가 켜져 있고 네트워크로 접근 가능한지 확인</li>
+              <li>연결 방식(SSH/Telnet)이 장비 사양과 일치하는지 확인</li>
+              <li>계정 정보(아이디/비밀번호)가 맞는지 확인 — 장비에서 비밀번호를 바꿨다면 여기서도
+                다시 입력해야 합니다.</li>
+            </ul>
+            <h3>정확한 원인을 더 자세히 보고 싶다</h3>
+            <p>왼쪽 메뉴 <strong>로그</strong> 화면에서 확인할 수 있습니다. "제어 로그" 탭은 내가
+              실행한 명령(음소거·다이얼·재부팅 등)의 성공/실패 이력, "시스템 로그" 탭은 프로그램
+              내부에서 발생한 오류를 원문 그대로 보여줍니다.</p>
+          </section>
+
+          <section id="appendix">
+            <h2>부록</h2>
+            <h3>버전 확인</h3>
+            <p>설정 화면 맨 아래에서 현재 버전을 확인할 수 있습니다.</p>
+            <h3>데이터 백업 · 새 PC로 옮기기</h3>
+            <p>등록한 장비 목록과 설정은 모두 exe 파일 옆 <code>data</code> 폴더 안에 있습니다.
+              이 폴더를 통째로 복사해두면 백업이 되고, 새 PC의 같은 위치에 그대로 붙여넣으면
+              설정을 다시 하지 않아도 됩니다.</p>
+            <div class="guide-callout warn">
+              프로그램 버전을 새 것으로 교체할 때는 exe 파일만 바꾸고 <code>data</code> 폴더는
+              지우지 마세요. 등록된 장비 목록이 함께 사라집니다.
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>
