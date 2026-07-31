@@ -6,6 +6,21 @@
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-07-31
+
+배포 exe 파일명을 BridgeX 브랜드에 맞춰 변경, 가이드 화면 스크롤 버그 수정.
+
+### Changed
+- `build.spec`의 `EXE(name=...)`를 `CodecControlCenter-vX.Y.Z` → `BridgeX-vX.Y.Z`로 변경.
+  내부 레포/프로젝트명(`codec_control_center`)은 그대로 유지 — 사용자에게 보이는 배포 산출물
+  이름만 대상. 앱 내장 가이드(`/guide`)가 이미 "BridgeX-vX.Y.Z.exe"로 안내하고 있었는데 실제
+  빌드 산출물 이름이 달랐던 불일치를 해소.
+
+### Fixed
+- `/guide`처럼 본문이 긴 화면에서 마우스로 스크롤할 때 화면이 튀는 버그. 원인은 `.topbar`가
+  `position: sticky`가 아닌 상태에서 사이드바에만 `position: sticky; top: 0`를 걸어둔 것 —
+  제거하고 사이드바 "맨 아래" 고정에 필요한 `align-self: flex-start` + 고정 높이만 남김.
+
 ## [1.5.1] - 2026-07-31
 
 로컬 포트(8765) 충돌 시 자동 재시도 (`docs/BACKLOG.md` 첫 항목 처리).

@@ -45,7 +45,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name=f"CodecControlCenter-v{__version__}",
+    name=f"BridgeX-v{__version__}",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

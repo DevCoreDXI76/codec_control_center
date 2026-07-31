@@ -61,7 +61,7 @@ def test_resolve_paths_frozen_mode(monkeypatch, tmp_path):
 
     fake_meipass = tmp_path / "meipass"
     fake_exe_dir = tmp_path / "install_dir"
-    fake_exe = fake_exe_dir / "CodecControlCenter.exe"
+    fake_exe = fake_exe_dir / "BridgeX.exe"
 
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "_MEIPASS", str(fake_meipass), raising=False)
