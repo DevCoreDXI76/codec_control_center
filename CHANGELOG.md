@@ -6,6 +6,22 @@
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-07-31
+
+제품 브랜드를 "BridgeX"로 확정(coredxi 제품군)하고, 로고/아이콘을 실제 화면·배포물에 통합.
+
+### Added
+- `coredxi` 사내 로고를 대시보드/설정/로그 화면 상단바에 통합, `<title>`을 "BridgeX"로 변경.
+- `favicon.ico`(16/32/48px), `app-icon.ico`(16/32/48/256px) 신규 생성 — `build.spec`의 `EXE()`에
+  아이콘으로 연결해 다음 빌드부터 exe 아이콘에도 반영.
+- 16px 파비콘 전용 단순화 로고(`coredxi-mark-simplified.png`) — 원본의 육각 체인 디테일이 16px에서
+  뭉개지는 문제를 3배 슈퍼샘플링 후 다운스케일 방식으로 해결(계단현상·번짐 없이 안티앨리어싱).
+
+### Changed
+- 내부 레포/프로젝트명(`codec_control_center`, exe 파일명 `CodecControlCenter-vX.Y.Z.exe`)과
+  `PLAN.md`/`PRD.md`/`SPEC.md` 등 기획 문서 제목은 유지 — 이번 변경은 화면에 보이는 브랜딩
+  (제목/헤더/파비콘/exe 아이콘 이미지)범위로 한정.
+
 ## [1.3.0] - 2026-07-30
 
 `/logs` 페이지에서 시스템 로그(`data/app.log`)를 볼 수 있는 뷰어 추가.
