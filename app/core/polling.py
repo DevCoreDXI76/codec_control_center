@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from typing import TypeVar
 
 from app.core.driver_base import DeviceDriver, DeviceStatus, DriverError
 
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 DriverFactory = Callable[[str], DeviceDriver]
 StatusCallback = Callable[[str, DeviceStatus], None]
+T = TypeVar("T")
 
 
 def _now_iso() -> str:
@@ -33,6 +35,11 @@ class _DeviceRuntime:
     consecutive_failures: int = 0
     last_status: DeviceStatus | None = None
     task: asyncio.Task | None = None
+    # 같은 장비의 텔넷/SSH 연결에 두 코루틴이 동시에 명령을 보내면 응답 줄이 뒤섞여
+    # 상태가 영구적으로 어긋난다(2026-07-31 VDI 실장비 검증에서 재현됨 — 수동 새로고침이
+    # 자동 폴링과 겹치며 이후 폴링의 통화 상태가 계속 잘못 표시됨). 폴링/제어 동작이
+    # 이 장비의 드라이버를 만질 때는 반드시 이 락을 먼저 잡는다.
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
 class PollingScheduler:
@@ -99,15 +106,35 @@ class PollingScheduler:
         runtime.driver = None
 
     async def get_driver(self, device_id: str) -> DeviceDriver:
-        """제어 API 등에서 폴링과 동일한(재사용되는) 드라이버 세션을 얻는다."""
+        """폴링과 동일한(재사용되는) 드라이버 세션을 얻는다.
+
+        주의: 이 메서드가 반환한 드라이버로 직접 명령을 보내면 락 보호를 벗어난다 —
+        연결 확인 자체만 잠깐 잠글 뿐, 반환 이후의 실제 명령 호출은 배경 폴링과
+        겹칠 수 있다. 드라이버로 실제 동작(mute/dial/hangup/... 등)을 실행할 거라면
+        `run_with_driver()`를 대신 써서 그 동작 전체를 락 안에서 실행해야 한다."""
         runtime = self._runtimes.get(device_id)
         if runtime is None:
             raise KeyError(f"unknown device id: {device_id}")
-        async with self._semaphore:
+        async with self._semaphore, runtime.lock:
             if runtime.driver is None:
                 runtime.driver = self._driver_factory(device_id)
                 await runtime.driver.connect()
         return runtime.driver
+
+    async def run_with_driver(
+        self, device_id: str, operation: Callable[[DeviceDriver], Awaitable[T]]
+    ) -> T:
+        """제어 API 등에서 폴링과 동일한(재사용되는) 드라이버 세션으로 임의의 동작을
+        실행한다. 연결 확인부터 operation 실행까지 전부 이 장비의 락 안에서 이뤄지므로,
+        같은 시각에 배경 폴링이나 다른 제어 동작이 같은 연결을 건드릴 수 없다."""
+        runtime = self._runtimes.get(device_id)
+        if runtime is None:
+            raise KeyError(f"unknown device id: {device_id}")
+        async with self._semaphore, runtime.lock:
+            if runtime.driver is None:
+                runtime.driver = self._driver_factory(device_id)
+                await runtime.driver.connect()
+            return await operation(runtime.driver)
 
     async def start(self) -> None:
         self._running = True
@@ -153,10 +180,11 @@ class PollingScheduler:
 
     async def _poll_device(self, device_id: str, runtime: _DeviceRuntime) -> DeviceStatus:
         try:
-            if runtime.driver is None:
-                runtime.driver = self._driver_factory(device_id)
-                await runtime.driver.connect()
-            status = await runtime.driver.get_status()
+            async with runtime.lock:
+                if runtime.driver is None:
+                    runtime.driver = self._driver_factory(device_id)
+                    await runtime.driver.connect()
+                status = await runtime.driver.get_status()
         except DriverError as exc:
             logger.warning("device %s poll failed: %s", self._get_device_label(device_id), exc)
             status = DeviceStatus(

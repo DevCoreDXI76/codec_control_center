@@ -11,11 +11,11 @@ from app.simulator.cisco_sim_server import CiscoSimServer
 def test_mute_unmute():
     sim = CiscoSimServer()
     resp = sim.handle("xCommand Audio Microphones Mute")
-    assert resp.startswith("*r AudioMicrophonesMuteResult (status=OK):")
+    assert resp.startswith("*r MicrophonesMuteResult (status=OK):")
     assert sim.state.muted is True
 
     resp = sim.handle("xCommand Audio Microphones Unmute")
-    assert resp.startswith("*r AudioMicrophonesUnmuteResult (status=OK):")
+    assert resp.startswith("*r MicrophonesUnmuteResult (status=OK):")
     assert sim.state.muted is False
 
 
@@ -128,7 +128,7 @@ def test_ssh_server_end_to_end():
             buffer = ""
             while "** end" not in buffer and time.time() < deadline:
                 buffer += channel.recv(4096).decode("utf-8", errors="replace")
-            assert "AudioMicrophonesMuteResult (status=OK)" in buffer
+            assert "MicrophonesMuteResult (status=OK)" in buffer
         finally:
             client.close()
     finally:

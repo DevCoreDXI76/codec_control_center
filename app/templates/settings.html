@@ -86,8 +86,12 @@
             <label class="checkbox-label"><input type="checkbox" x-model="open_browser_on_start" /> 시작 시 자동으로 브라우저 열기</label>
           </div>
           <div class="field">
-            <label>Teams 테넌트 주소 (CVI, 예: vc.poscodx.com)</label>
-            <input type="text" x-model="teams_tenant_address" placeholder="vc.poscodx.com" />
+            <label>Teams 테넌트 주소 (CVI)</label>
+            <input type="text" x-model="teams_tenant_address" placeholder="예: vc.example.com" />
+            <p class="meta" x-show="!teams_tenant_address" style="color: var(--color-warn)">
+              ⚠ 아직 저장된 값이 없습니다 — 위 칸의 회색 글씨는 예시일 뿐, 실제 값이 아닙니다.
+              여기에 직접 입력하고 저장을 눌러야 회의ID만으로 다이얼할 수 있습니다.
+            </p>
           </div>
           <p class="error-text" x-show="error" x-text="error"></p>
           <p class="meta" x-show="saved" style="color: var(--color-online)">저장되었습니다.</p>
@@ -95,7 +99,10 @@
             <button class="btn btn-primary" type="submit" :disabled="saving">저장</button>
           </div>
         </form>
-        <p class="meta version-footer">Codec Control Center v{{ app_version }}</p>
+        <p class="meta version-footer">
+          <img class="footer-mark" src="/static/img/coredxi-mark.png" alt="" />
+          BridgeX v{{ app_version }} · coredxi 제작
+        </p>
       </div>
     </main>
   </div>

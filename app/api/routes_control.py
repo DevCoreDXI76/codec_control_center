@@ -85,12 +85,9 @@ async def _run_control(
     device_name = device.name if device is not None else device_id
 
     try:
-        driver = await scheduler.get_driver(device_id)
+        ok = await scheduler.run_with_driver(device_id, action)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="device not found") from exc
-
-    try:
-        ok = await action(driver)
     except DriverError as exc:
         logger.warning("device %s %s failed: %s", device_name, action_name, exc)
         history.log(device_id=device_id, device_name=device_name, action=action_name, success=False, detail=str(exc))

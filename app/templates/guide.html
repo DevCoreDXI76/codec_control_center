@@ -56,6 +56,10 @@
                 <code>http://127.0.0.1:8765</code>를 직접 입력해도 동일한 화면이 열립니다.</li>
               <li>콘솔 창은 실행 중 계속 떠 있어야 하는 창입니다. 닫으면 프로그램도 함께 종료됩니다.</li>
             </ul>
+            <figure>
+              <img src="/static/img/guide/guide-dashboard-overview.png" alt="실행 후 뜨는 대시보드 화면 — 상단 통계, 그룹 탭, 오늘의 예정 회의, 장비 카드 목록" />
+              <figcaption>실행하면 이런 대시보드 화면이 뜹니다.</figcaption>
+            </figure>
             <div class="guide-callout">
               모든 데이터(등록한 장비 목록, 설정값)는 exe 파일과 같은 위치의 <code>data</code>
               폴더에 저장됩니다. 인터넷이나 별도 서버로 전송되지 않는, 이 PC 안에서만 동작하는
@@ -66,6 +70,10 @@
           <section id="devices">
             <h2>2. 장비 등록</h2>
             <p>대시보드 화면 오른쪽 위의 <strong>+ 장비 등록</strong> 버튼을 누르면 등록 창이 열립니다.</p>
+            <figure>
+              <img src="/static/img/guide/guide-register-modal.png" alt="장비 등록 창 — 이름, 제조사, 접속방식, IP/Host, Port, 그룹, 계정 ID/PW, Teams 테넌트 주소 입력란" />
+              <figcaption>장비 등록 창. 아래 항목이 모두 이 창에 있습니다.</figcaption>
+            </figure>
             <ul>
               <li><strong>이름</strong>: 화면에 표시할 이름 (예: "3층 대회의실")</li>
               <li><strong>제조사</strong>: Poly 또는 Cisco</li>
@@ -88,6 +96,10 @@
             <h3>카드에서 바로 하는 것들</h3>
             <p>각 장비는 카드 형태로 표시되며, 카드 테두리 색으로 상태를 바로 알 수 있습니다
               (초록=온라인, 파랑=통화중, 빨강=오류). 카드의 아이콘 버튼으로 다음을 할 수 있습니다.</p>
+            <figure>
+              <img src="/static/img/guide/guide-card-icons.png" alt="장비 카드 예시 — 이름/모델/상태와 음소거·통화종료·새로고침·재부팅 아이콘, Teams 오늘 회의·다이얼 입력란" />
+              <figcaption>장비 카드 예시. 왼쪽부터 음소거, 통화 종료, 새로고침, 재부팅 아이콘입니다.</figcaption>
+            </figure>
             <ul>
               <li><strong>음소거 / 음소거 해제</strong> — 마이크 아이콘 클릭</li>
               <li><strong>통화 종료</strong> — 통화 중일 때만 활성화</li>
@@ -110,16 +122,28 @@
             <h3>오늘 예정된 회의</h3>
             <p>장비가 캘린더에 등록되어 있으면, 카드에 오늘 남은 회의 목록이 시간순으로 표시됩니다.
               회의 링크를 클릭하면 그 자리에서 바로 참가 명령을 보냅니다.</p>
+            <figure>
+              <img src="/static/img/guide/guide-teams-meetings.png" alt="카드에 표시되는 오늘 남은 회의 목록 — 시간, 회의 제목, 참가 링크" />
+              <figcaption>카드에 이렇게 표시됩니다. 파란 링크를 클릭하면 바로 참가합니다.</figcaption>
+            </figure>
             <h3>회의 ID로 직접 참가</h3>
             <p>캘린더 자동 연동이 안 되는 상황을 위한 보조 수단입니다. 카드의 다이얼 입력란에
               회의 ID(10자리 숫자)를 입력하고 <kbd>Enter</kbd>를 누르면, 설정된 Teams 주소로
               바로 다이얼합니다.</p>
+            <figure>
+              <img src="/static/img/guide/guide-teams-dial.png" alt="회의 ID 10자리를 입력한 다이얼 입력란 — 회의ID@테넌트주소 형태로 다이얼" />
+              <figcaption>회의 ID를 입력한 모습. 왼쪽이 회의 ID, "@" 뒤가 테넌트 주소입니다.</figcaption>
+            </figure>
           </section>
 
           <section id="settings">
             <h2>5. 설정</h2>
             <p>왼쪽 메뉴의 <strong>설정</strong>에서 다음 값을 바꿀 수 있습니다. 값을 바꾸면 즉시
               저장되고, 프로그램을 다시 켜도 유지됩니다.</p>
+            <figure>
+              <img src="/static/img/guide/guide-settings.png" alt="설정 화면 — 폴링 주기, 동시 접속 제한, 명령 타임아웃, 데이터 저장 경로, 브라우저 자동 열기, Teams 테넌트 주소" />
+              <figcaption>설정 화면. 아래 항목이 모두 여기 있습니다.</figcaption>
+            </figure>
             <ul>
               <li><strong>폴링 주기</strong> — 장비 상태를 얼마나 자주 확인할지(초 단위)</li>
               <li><strong>동시 접속 제한</strong> — 한 번에 몇 대까지 동시에 접속할지</li>

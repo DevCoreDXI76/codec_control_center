@@ -226,6 +226,11 @@ class PolyDriver(DeviceDriver):
 
     async def get_status(self) -> DeviceStatus:
         now = datetime.now(timezone.utc).isoformat()
+        if self._model is None:
+            # connect() 시점의 단발성 모델 조회가 실패(타임아웃/일시적 응답 불일치 등)하면
+            # 그 이후로는 재연결 전까지 영영 재시도하지 않아 "모델 확인 중..."에 계속
+            # 머무르는 문제가 있었다 — 모델을 아직 못 얻었으면 폴링마다 한 번씩 더 시도한다.
+            await self._fetch_model()
         try:
             mute_resp = await self._call(cmd.MUTE_NEAR_GET)
             muted = mute_resp == "mute near on"
@@ -269,15 +274,25 @@ class PolyDriver(DeviceDriver):
     async def mute(self, on: bool) -> bool:
         resp = await self._call(cmd.mute_near(on))
         expected = "mute near on" if on else "mute near off"
-        return resp == expected
+        # 예전에는 불일치 시 그냥 False만 반환해 실패 원인이 로그에 전혀 안 남았다
+        # (Cisco 쪽 DriverCommandError처럼 원문을 남겨야 다음에 바로 진단 가능하다 —
+        # 2026-07-31 VDI 검증에서 Cisco mute 실패는 원문 덕에 바로 원인을 찾았지만
+        # Poly는 원문이 없어 원인 불명이었다).
+        if resp != expected:
+            raise DriverCommandError(f"unexpected response to {cmd.mute_near(on)!r}: {resp!r}")
+        return True
 
     async def dial(self, address: str) -> bool:
         resp = await self._call(cmd.dial_manual(address))
-        return resp.startswith("dialing")
+        if not resp.startswith("dialing"):
+            raise DriverCommandError(f"unexpected response to dial: {resp!r}")
+        return True
 
     async def hangup(self) -> bool:
         resp = await self._call(cmd.hangup_video())
-        return resp == "hanging up video"
+        if resp != "hanging up video":
+            raise DriverCommandError(f"unexpected response to hangup: {resp!r}")
+        return True
 
     async def reboot(self) -> bool:
         # 문서: "reboot now"는 확인 없이 재시작하며 별도 피드백을 반환하지 않는다.

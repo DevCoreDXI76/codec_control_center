@@ -83,6 +83,9 @@ body {
   padding: 0.75rem 1.5rem;
   background: var(--color-card-bg);
   border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
 
 .topbar h1 {
@@ -109,7 +112,7 @@ body {
 
 .layout {
   display: flex;
-  min-height: calc(100vh - 53px);
+  min-height: calc(100vh - 57px);
 }
 
 .sidebar {
@@ -122,10 +125,11 @@ body {
   flex-direction: column;
   align-self: flex-start; /* .main이 뷰포트보다 길 때(가이드 화면) 사이드바가 같이 늘어나 "맨
     아래" 링크가 페이지 끝으로 밀려나는 것을 방지 */
-  height: calc(100vh - 53px);
-  /* position: sticky는 넣지 않는다 — .topbar가 sticky가 아닌 상태에서 사이드바만 sticky로
-     고정하면 스크롤 시 화면이 튀는 버그가 있었음(2026-07-31). "맨 아래" 고정에는 위 두 줄로
-     충분하다. */
+  height: calc(100vh - 57px);
+  position: sticky;
+  top: 57px; /* .topbar 높이(sticky)만큼 오프셋 — 사이드바의 문서상 시작 위치도 이미
+    top:57px이라 스크롤해도 값이 그대로라 튀지 않는다. top:0으로 하면 .topbar가
+    화면을 벗어나는 순간 사이드바가 위로 튀는 버그가 재발한다(2026-07-31). */
 }
 
 .sidebar a {
@@ -426,6 +430,15 @@ body {
   font-size: 0.9rem;
 }
 
+/* 플레이스홀더가 실제로 입력된 값처럼 보여서 "이미 채워져 있다"고 착각하는 걸
+   막기 위해(2026-07-31 VDI 검증 — 예시로 넣어둔 회사 실제 도메인이 실제 저장된
+   값처럼 보였던 문제) 옅은 색 + 기울임으로 눈에 띄게 구분한다. */
+.field input::placeholder,
+.dial-row input::placeholder {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
 .field input[type="checkbox"] {
   width: auto;
   margin: 0;
@@ -479,6 +492,17 @@ body {
   padding-top: 0.75rem;
   border-top: 1px solid var(--color-border);
   font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--color-text-muted);
+}
+
+.footer-mark {
+  height: 14px;
+  width: auto;
+  display: block;
+  opacity: 0.8;
 }
 
 .settings-form input[readonly] {
@@ -604,7 +628,7 @@ body {
 
 .icon-btn.muted svg,
 .icon-btn.mic-preview:hover svg,
-.icon-btn.hangup-preview.on:hover svg {
+.icon-btn.hangup-preview.on svg {
   stroke: var(--color-error);
 }
 
@@ -727,7 +751,9 @@ body {
 }
 
 .dial-row .id-input {
-  width: 4.6rem;
+  /* 회의ID는 10자리 숫자 — 4.6rem이었을 때는 다 입력하면 뒷자리가 스크롤되어
+     안 보였다(2026-07-31 가이드 스크린샷 작업 중 발견). */
+  width: 5.5rem;
   flex-shrink: 0;
 }
 
@@ -776,7 +802,8 @@ body {
   width: 190px;
   flex-shrink: 0;
   position: sticky;
-  top: 1.25rem;
+  top: calc(57px + 1.25rem); /* .topbar가 sticky(top:0, 높이 57px)라 그 아래로 오프셋해야
+    함 — 안 그러면 목차 박스가 헤더 뒤에 가려진 채로 붙는다(2026-07-31) */
   background: var(--color-card-bg);
   border: 1px solid var(--color-border);
   border-radius: 10px;
@@ -886,6 +913,24 @@ body {
 
 .guide-callout.warn {
   border-left-color: var(--color-warn);
+}
+
+.guide-content figure {
+  margin: 0.9rem 0;
+}
+
+.guide-content figure img {
+  max-width: 100%;
+  display: block;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
+.guide-content figcaption {
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  text-align: center;
 }
 
 @media (max-width: 760px) {

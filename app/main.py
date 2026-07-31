@@ -81,7 +81,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await app.state.scheduler.stop()
 
 
-app = FastAPI(title="Codec Control Center", lifespan=lifespan)
+app = FastAPI(title="BridgeX", lifespan=lifespan)
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 

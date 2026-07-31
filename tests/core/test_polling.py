@@ -32,8 +32,14 @@ class FakeDriver(DeviceDriver):
     async def get_status(self) -> DeviceStatus:
         self._registry.concurrent_calls += 1
         self._registry.max_concurrent = max(self._registry.max_concurrent, self._registry.concurrent_calls)
+        per_device = self._registry.per_device_concurrent
+        per_device[self.device_id] = per_device.get(self.device_id, 0) + 1
+        self._registry.max_concurrent_per_device[self.device_id] = max(
+            self._registry.max_concurrent_per_device.get(self.device_id, 0), per_device[self.device_id]
+        )
         await asyncio.sleep(0.01)
         self._registry.concurrent_calls -= 1
+        per_device[self.device_id] -= 1
         return self._registry.status_for(self.device_id)
 
     async def mute(self, on: bool) -> bool:
@@ -63,6 +69,8 @@ class FakeDriverRegistry:
         self.connect_should_fail: dict[str, bool] = {}
         self.concurrent_calls = 0
         self.max_concurrent = 0
+        self.per_device_concurrent: dict[str, int] = {}
+        self.max_concurrent_per_device: dict[str, int] = {}
         self.created: dict[str, FakeDriver] = {}
 
     def factory(self, device_id: str) -> FakeDriver:
@@ -217,6 +225,25 @@ async def test_add_device_while_running_does_not_poll_immediately(registry):
         await scheduler.stop()
 
 
+async def test_manual_refresh_does_not_race_background_poll(registry):
+    """수동 새로고침(poll_once)이 배경 폴링(_poll_loop)과 같은 장비의 드라이버를 동시에
+    건드리면 안 된다. 세마포어는 전체 동시 접속 수만 제한할 뿐 "같은 장비"를 중복 폴링하는
+    것은 막지 않는데, 실제 텔넷/SSH 연결은 두 코루틴이 동시에 명령을 보내면 응답 줄이
+    뒤섞여 상태가 영구적으로 어긋난다 — 2026-07-31 VDI 실장비 검증에서 재현된 문제
+    (수동 새로고침이 자동 폴링과 겹치며 이후 폴링의 통화 상태가 계속 잘못 표시됨)."""
+    scheduler = PollingScheduler(driver_factory=registry.factory, base_interval=0.02, max_concurrency=8)
+    await scheduler.add_device("dev-1")
+    await scheduler.start()
+    try:
+        await asyncio.sleep(0.005)  # 배경 폴링이 최소 한 번은 진행 중이 되도록
+        await asyncio.gather(*(scheduler.poll_once("dev-1") for _ in range(5)))
+        await asyncio.sleep(0.03)
+    finally:
+        await scheduler.stop()
+
+    assert registry.max_concurrent_per_device.get("dev-1", 0) <= 1
+
+
 async def test_get_driver_reuses_same_session(registry):
     scheduler = PollingScheduler(driver_factory=registry.factory, base_interval=15.0)
     await scheduler.add_device("dev-1")
@@ -230,6 +257,37 @@ async def test_get_driver_unknown_device_raises_keyerror(registry):
     scheduler = PollingScheduler(driver_factory=registry.factory)
     with pytest.raises(KeyError):
         await scheduler.get_driver("no-such-device")
+
+
+async def test_run_with_driver_executes_operation_with_connected_driver(registry):
+    scheduler = PollingScheduler(driver_factory=registry.factory, base_interval=15.0)
+    await scheduler.add_device("dev-1")
+    result = await scheduler.run_with_driver("dev-1", lambda driver: driver.get_status())
+    assert result.online is True
+    assert registry.created["dev-1"].connect_calls == 1
+
+
+async def test_run_with_driver_unknown_device_raises_keyerror(registry):
+    scheduler = PollingScheduler(driver_factory=registry.factory)
+    with pytest.raises(KeyError):
+        await scheduler.run_with_driver("no-such-device", lambda driver: driver.get_status())
+
+
+async def test_run_with_driver_does_not_race_background_poll(registry):
+    """제어 액션(run_with_driver)도 배경 폴링과 같은 장비의 드라이버를 동시에 건드리면
+    안 된다 — mute/dial 등 제어 명령이 폴링과 겹쳐도 같은 문제가 재현될 수 있다."""
+    scheduler = PollingScheduler(driver_factory=registry.factory, base_interval=0.02, max_concurrency=8)
+    await scheduler.add_device("dev-1")
+    await scheduler.start()
+    try:
+        await asyncio.sleep(0.005)
+        await asyncio.gather(
+            *(scheduler.run_with_driver("dev-1", lambda driver: driver.get_status()) for _ in range(5))
+        )
+        await asyncio.sleep(0.03)
+    finally:
+        await scheduler.stop()
+    assert registry.max_concurrent_per_device.get("dev-1", 0) <= 1
 
 
 async def test_reset_device_disconnects_and_clears_session(registry):

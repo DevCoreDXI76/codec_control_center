@@ -157,9 +157,12 @@ async function callControl(deviceId, action, body) {
     headers: { "Content-Type": "application/json" },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
-  if (!resp.ok) {
-    const detail = await resp.json().catch(() => ({}));
-    showToast(`실패: ${detail.detail || resp.status}`);
+  const data = await resp.json().catch(() => ({}));
+  // resp.ok(HTTP 상태)만 보면 안 된다 — 서버가 200과 함께 {ok:false}를 돌려주는
+  // 경로도 있어서(예: 드라이버가 예외 없이 실패만 반환), 그 경우 실제로는 실패인데
+  // "완료" 토스트가 뜨던 버그가 있었다(2026-07-31 VDI 검증).
+  if (!resp.ok || data.ok === false) {
+    showToast(`실패: ${data.detail || resp.status}`);
     return false;
   }
   return true;

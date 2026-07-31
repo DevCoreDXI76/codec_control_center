@@ -9,6 +9,7 @@ cisco_commands.py에서 문서 대조로 확정한 명령만 사용한다.
 from __future__ import annotations
 
 import asyncio
+import re
 import socket
 from datetime import datetime, timezone
 
@@ -198,7 +199,11 @@ class CiscoDriver(DeviceDriver):
 
     def _mute_sync(self, on: bool) -> bool:
         command = cmd.AUDIO_MUTE if on else cmd.AUDIO_UNMUTE
-        expected = "*r AudioMicrophonesMuteResult" if on else "*r AudioMicrophonesUnmuteResult"
+        # 확인됨(2026-07-31 VDI 실장비 응답 원문): 결과 라인은 "*r MicrophonesMuteResult"/
+        # "*r MicrophonesUnmuteResult"이다 — 다른 Audio Microphones 명령들과 달리 "Audio"가
+        # 빠진다. 예전 값("*r AudioMicrophonesMuteResult")은 어느 명령과도 안 맞아 mute/unmute가
+        # 실장비에서 항상 실패로 기록되던 버그였다.
+        expected = "*r MicrophonesMuteResult" if on else "*r MicrophonesUnmuteResult"
         lines = self._call_block_sync(command)
         return _check_result_ok(lines, expected)
 
@@ -249,18 +254,13 @@ class CiscoDriver(DeviceDriver):
         return await asyncio.to_thread(self._get_obtp_entries_sync)
 
     def _get_obtp_entries_sync(self) -> list[CalendarEntry]:
-        # 주의: Bookings List/Get의 필드 레이아웃은 공식 문서에 응답 예시가 없어
-        # 최선으로 추정한 것이다 (cisco_commands.py 주석 참고). Phase③ 실장비 검증 필요.
+        # 확인됨(2026-07-31 VDI 실장비 응답 원문): Bookings List 결과의 모든 줄에
+        # "*r BookingsListResult " 프리픽스가 붙고(다른 xCommand 결과와 동일한 RoomOS
+        # 컨벤션), Title/Time/DialInfo까지 이미 다 포함돼 있어 회의별 Bookings Get을
+        # 따로 호출할 필요가 없다 — 기존 파서는 이 프리픽스를 고려하지 않아 모든 줄을
+        # 건너뛰는 바람에 일정이 하나도 안 잡히던 버그였다.
         list_lines = self._call_block_sync(cmd.bookings_list())
-        meeting_ids = _extract_meeting_ids(list_lines)
-
-        entries: list[CalendarEntry] = []
-        for meeting_id in meeting_ids:
-            detail_lines = self._call_block_sync(cmd.bookings_get(meeting_id))
-            entry = _parse_booking_detail(detail_lines)
-            if entry is not None:
-                entries.append(entry)
-        return entries
+        return _parse_bookings_list(list_lines)
 
     async def join_meeting(self, entry: CalendarEntry) -> bool:
         if not entry.join_uri:
@@ -287,34 +287,37 @@ def _check_result_ok(lines: list[str], expected_prefix: str) -> bool:
     raise DriverCommandError("empty response from device")
 
 
-def _extract_meeting_ids(list_lines: list[str]) -> list[str]:
-    """"Booking <n> Id: "<id>"" 형태의 줄에서 회의 ID만 뽑는다 (추정 포맷)."""
-    ids: list[str] = []
+_BOOKINGS_LIST_PREFIX = "*r BookingsListResult "
+_BOOKING_FIELD_RE = re.compile(r"^Booking (\d+) (.+)$")
+
+
+def _parse_bookings_list(list_lines: list[str]) -> list[CalendarEntry]:
+    """"*r BookingsListResult Booking <n> <필드경로>: "<값>"" 형태의 줄들을
+    회의별로 묶어 CalendarEntry로 변환한다 (2026-07-31 VDI 실장비 응답 원문으로 확인)."""
+    bookings: dict[str, dict[str, str]] = {}
     for raw in list_lines:
         line = raw.strip()
-        key, sep, value = line.partition(": ")
+        if line.startswith(_BOOKINGS_LIST_PREFIX):
+            line = line[len(_BOOKINGS_LIST_PREFIX) :]
+        match = _BOOKING_FIELD_RE.match(line)
+        if not match:
+            continue
+        index, rest = match.group(1), match.group(2)
+        key, sep, value = rest.partition(": ")
         if not sep:
             continue
-        if key.startswith("Booking ") and key.endswith(" Id"):
-            ids.append(value.strip('"'))
-    return ids
+        bookings.setdefault(index, {})[key] = value.strip('"')
 
-
-def _parse_booking_detail(detail_lines: list[str]) -> CalendarEntry | None:
-    """"Booking <Field>: "<value>"" 형태의 줄들을 CalendarEntry로 변환한다 (추정 포맷)."""
-    fields: dict[str, str] = {}
-    for raw in detail_lines:
-        line = raw.strip()
-        key, sep, value = line.partition(": ")
-        if not sep or not key.startswith("Booking "):
+    entries: list[CalendarEntry] = []
+    for fields in bookings.values():
+        if "Title" not in fields:
             continue
-        fields[key[len("Booking ") :]] = value.strip('"')
-
-    if "Title" not in fields:
-        return None
-    return CalendarEntry(
-        subject=fields.get("Title", ""),
-        start_time=fields.get("Time StartTime", ""),
-        end_time=fields.get("Time EndTime", ""),
-        join_uri=fields.get("DialInfo Calls Call 1 Number"),
-    )
+        entries.append(
+            CalendarEntry(
+                subject=fields.get("Title", ""),
+                start_time=fields.get("Time StartTime", ""),
+                end_time=fields.get("Time EndTime", ""),
+                join_uri=fields.get("DialInfo Calls Call 1 Number"),
+            )
+        )
+    return entries

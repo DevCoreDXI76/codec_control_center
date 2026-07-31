@@ -3,7 +3,7 @@ import pytest_asyncio
 
 from app.core.driver_base import CalendarEntry, DriverCommandError, DriverTimeoutError
 from app.drivers.cisco import cisco_commands as cisco_cmd
-from app.drivers.cisco.cisco_driver import CiscoDriver, _check_result_ok
+from app.drivers.cisco.cisco_driver import CiscoDriver, _check_result_ok, _parse_bookings_list
 from app.simulator.cisco_sim_server import CiscoSimServer
 
 
@@ -154,6 +154,37 @@ def test_check_result_ok_raises_on_empty_response():
         _check_result_ok([], "*r AudioMicrophonesMuteResult")
 
 
+# --- 2026-07-31 VDI 실장비 응답 원문 회귀 테스트: mute/unmute 결과 프리픽스 ---
+# "*r AudioMicrophonesMuteResult"이 아니라 "*r MicrophonesMuteResult"("Audio" 없음)이며,
+# 앞뒤에 echo성 노이즈 줄("OK", 명령 에코)이 섞여 있어도 정상 판정해야 한다.
+
+
+def test_mute_handles_real_device_response_with_echo_noise():
+    driver = CiscoDriver(host="127.0.0.1", port=1, username="admin", password="x")
+    driver._call_block_sync = lambda command, end="** end": [
+        "",
+        "OK",
+        "xCommand Audio Microphones Mute",
+        "",
+        "OK",
+        "*r MicrophonesMuteResult (status=OK):",
+    ]
+    assert driver._mute_sync(True) is True
+
+
+def test_unmute_handles_real_device_response_with_echo_noise():
+    driver = CiscoDriver(host="127.0.0.1", port=1, username="admin", password="x")
+    driver._call_block_sync = lambda command, end="** end": [
+        "",
+        "OK",
+        "xCommand Audio Microphones Unmute",
+        "",
+        "OK",
+        "*r MicrophonesUnmuteResult (status=OK):",
+    ]
+    assert driver._mute_sync(False) is True
+
+
 async def test_get_status_includes_model_and_uptime(sim_and_driver):
     _sim, driver = sim_and_driver
     status = await driver.get_status()
@@ -188,3 +219,93 @@ def test_get_status_uptime_failure_still_reports_online():
     assert status.error is None
     assert status.uptime_seconds is None
     assert status.model == "Room Kit Pro (SIM)"
+
+
+# --- _parse_bookings_list (2026-07-31 VDI 실장비 응답 원문 회귀 테스트) ---
+#
+# 판교 6층 B회의실 Cisco 장비에서 "xCommand Bookings List Days: 1 DayOffset: 0"을 직접
+# 실행해 받은 원문(줄 사이 공백/"OK" 에코 포함, 실제 터미널 출력 그대로) — 이전 파서는
+# "*r BookingsListResult " 프리픽스를 고려하지 않아 모든 줄을 건너뛰고 빈 목록을
+# 반환했다(Teams 일정이 하나도 안 잡히던 버그).
+_REAL_BOOKINGS_LIST_RESPONSE = [
+    "OK",
+    "",
+    "*r BookingsListResult (status=OK):",
+    "",
+    "*r BookingsListResult ResultInfo TotalRows: 1",
+    "",
+    '*r BookingsListResult LastUpdated: "2026-07-31T04:51:02Z"',
+    "",
+    '*r BookingsListResult Booking 1 Id: "c6f91f9a3eb655d4a17a8727399d760e"',
+    "",
+    '*r BookingsListResult Booking 1 MeetingId: ""',
+    "",
+    '*r BookingsListResult Booking 1 Title: "[회의실 예약] test"',
+    "",
+    '*r BookingsListResult Booking 1 Agenda: ""',
+    "",
+    "*r BookingsListResult Booking 1 Privacy: Public",
+    "",
+    '*r BookingsListResult Booking 1 Organizer FirstName: "강윤수(KANG"',
+    "",
+    '*r BookingsListResult Booking 1 Organizer LastName: "YUN SOO)_프로_인프라서비스섹션"',
+    "",
+    '*r BookingsListResult Booking 1 Organizer Email: "yunsoo.kang@poscodx.com"',
+    "",
+    '*r BookingsListResult Booking 1 Organizer Id: ""',
+    "",
+    '*r BookingsListResult Booking 1 Time StartTime: "2026-07-31T04:30:00Z"',
+    "",
+    "*r BookingsListResult Booking 1 Time StartTimeBuffer: 900",
+    "",
+    '*r BookingsListResult Booking 1 Time EndTime: "2026-07-31T06:00:00Z"',
+    "",
+    "*r BookingsListResult Booking 1 Time EndTimeBuffer: 0",
+    "",
+    "*r BookingsListResult Booking 1 MaximumMeetingExtension: 0",
+    "",
+    "*r BookingsListResult Booking 1 MeetingExtensionAvailability:",
+    "",
+    "*r BookingsListResult Booking 1 BookingStatus: OK",
+    "",
+    '*r BookingsListResult Booking 1 BookingStatusMessage: ""',
+    "",
+    '*r BookingsListResult Booking 1 MeetingPlatform: "MicrosoftTeams"',
+    "",
+    "*r BookingsListResult Booking 1 Cancellable: False",
+    "",
+    "*r BookingsListResult Booking 1 Webex Enabled: False",
+    "",
+    '*r BookingsListResult Booking 1 Webex Url: ""',
+    "",
+    '*r BookingsListResult Booking 1 Webex MeetingNumber: ""',
+    "",
+    '*r BookingsListResult Booking 1 Webex Password: ""',
+    "",
+    '*r BookingsListResult Booking 1 Webex HostKey: ""',
+    "",
+    "*r BookingsListResult Booking 1 Encryption: BestEffort",
+    "",
+    "*r BookingsListResult Booking 1 Recording: Disabled",
+    "",
+    '*r BookingsListResult Booking 1 DialInfo Calls Call 1 Number: "1314657531@vc.poscodx.com"',
+    "",
+    "*r BookingsListResult Booking 1 DialInfo Calls Call 1 CallType: Video",
+    "",
+    "*r BookingsListResult Booking 1 DialInfo ConnectMode: OBTP",
+]
+
+
+def test_parse_bookings_list_real_device_response():
+    entries = _parse_bookings_list(_REAL_BOOKINGS_LIST_RESPONSE)
+
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry.subject == "[회의실 예약] test"
+    assert entry.start_time == "2026-07-31T04:30:00Z"
+    assert entry.end_time == "2026-07-31T06:00:00Z"
+    assert entry.join_uri == "1314657531@vc.poscodx.com"
+
+
+def test_parse_bookings_list_empty_when_no_bookings():
+    assert _parse_bookings_list(["OK", "", "*r BookingsListResult (status=OK):", "*r BookingsListResult ResultInfo TotalRows: 0"]) == []

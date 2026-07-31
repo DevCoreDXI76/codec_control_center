@@ -44,18 +44,12 @@ def _get_scheduler(request: Request) -> PollingScheduler:
     return request.app.state.scheduler
 
 
-async def _get_driver(request: Request, device_id: str):
-    try:
-        return await _get_scheduler(request).get_driver(device_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="device not found") from exc
-
-
 @router.get("/{device_id}/calendar")
 async def get_calendar(device_id: str, request: Request) -> dict:
-    driver = await _get_driver(request, device_id)
     try:
-        status = await driver.get_calendar_status()
+        status = await _get_scheduler(request).run_with_driver(device_id, lambda driver: driver.get_calendar_status())
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="device not found") from exc
     except NotImplementedError:
         return {"supported": False, "status": None}
     except DriverError as exc:
@@ -65,9 +59,10 @@ async def get_calendar(device_id: str, request: Request) -> dict:
 
 @router.get("/{device_id}/obtp")
 async def get_obtp(device_id: str, request: Request) -> dict:
-    driver = await _get_driver(request, device_id)
     try:
-        entries = await driver.get_obtp_entries()
+        entries = await _get_scheduler(request).run_with_driver(device_id, lambda driver: driver.get_obtp_entries())
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="device not found") from exc
     except NotImplementedError:
         return {"supported": False, "entries": []}
     except DriverError as exc:
@@ -77,7 +72,6 @@ async def get_obtp(device_id: str, request: Request) -> dict:
 
 @router.post("/{device_id}/join")
 async def join_meeting(device_id: str, payload: JoinRequest, request: Request) -> dict:
-    driver = await _get_driver(request, device_id)
     history: ControlHistory = request.app.state.history
     registry: DeviceRegistry = request.app.state.registry
     device = registry.get_device(device_id)
@@ -90,7 +84,9 @@ async def join_meeting(device_id: str, payload: JoinRequest, request: Request) -
         join_uri=payload.join_uri,
     )
     try:
-        ok = await driver.join_meeting(entry)
+        ok = await _get_scheduler(request).run_with_driver(device_id, lambda driver: driver.join_meeting(entry))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="device not found") from exc
     except DriverError as exc:
         history.log(device_id=device_id, device_name=device_name, action="join", success=False, detail=str(exc))
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -119,11 +115,12 @@ async def direct_dial(device_id: str, payload: DirectDialRequest, request: Reque
         raise HTTPException(status_code=422, detail="Teams 테넌트 주소가 설정되지 않았습니다")
 
     address = f"{payload.meeting_id}@{tenant}"
-    driver = await _get_driver(request, device_id)
     history: ControlHistory = request.app.state.history
 
     try:
-        ok = await driver.dial(address)
+        ok = await _get_scheduler(request).run_with_driver(device_id, lambda driver: driver.dial(address))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="device not found") from exc
     except DriverError as exc:
         history.log(device_id=device_id, device_name=device.name, action="direct_dial", success=False, detail=str(exc))
         raise HTTPException(status_code=502, detail=str(exc)) from exc

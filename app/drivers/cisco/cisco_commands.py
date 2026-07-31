@@ -26,6 +26,9 @@ Room Kit EQ, Room Bar, Room Bar Pro — 전부 RoomOS 통합 xAPI를 사용한�
 
 # --- Audio Microphones Mute/Unmute (파라미터 없음) ---
 # 확인: PepperDash CiscoCodec.cs PrivacyModeOn/Off
+# 결과 라인 프리픽스 확인됨(2026-07-31 VDI 실장비 응답 원문): "*r MicrophonesMuteResult"/
+# "*r MicrophonesUnmuteResult" — 명령 자체는 "Audio Microphones"지만 결과 이름에는 "Audio"가
+# 안 붙는다(cisco_driver.py `_mute_sync` 참고).
 AUDIO_MUTE = "xCommand Audio Microphones Mute"
 AUDIO_UNMUTE = "xCommand Audio Microphones Unmute"
 
@@ -65,15 +68,17 @@ SYSTEMUNIT_BOOT_RESTART = "xCommand SystemUnit Boot Action: Restart"
 STATUS_BOOKINGS_AVAILABILITY = "xStatus Bookings Availability Status"
 STATUS_BOOKINGS_CURRENT_ID = "xStatus Bookings Current Id"
 
-# --- Bookings List/Get (OBTP 목록) — 명령 문법은 확인, 응답의 상세 필드 레이아웃은 미확인 ---
+# --- Bookings List/Get (OBTP 목록) ---
 # 확인(명령 문법): RoomOS 11 API Reference Guide p.257 "xCommand Bookings List"/"xCommand Bookings Get"
 #   xCommand Bookings List [Days:] [DayOffset:] [Limit:] [Offset:]
 #   xCommand Bookings Get Id:"<meeting id>"
-# 미확인: 위 두 명령이 실제로 돌려주는 회의 상세(제목/주최자/발신주소 등)의 텍스트 모드
-#   줄 단위 필드 레이아웃 — 공식 문서에 응답 예시가 없다. cisco_driver.py의 파서는
-#   PepperDash BookingsDataClasses.cs(JSON 스키마)와 이 문서의 다른 다중 응답 명령들에서
-#   일관되게 쓰이는 "카테고리 <n> 필드" 평탄화 규칙을 조합해 최선으로 추정한 것이며,
-#   Phase③ 실장비 검증 전까지는 확정이 아니다.
+# 확인됨(2026-07-31 VDI 실장비 응답 원문, cisco_driver.py `_parse_bookings_list` 참고):
+#   Bookings List 응답은 모든 줄에 "*r BookingsListResult " 프리픽스가 붙고,
+#   Title/Time StartTime·EndTime/DialInfo Calls Call 1 Number까지 이미 포함돼 있어
+#   회의별 Bookings Get 호출이 필요 없다. 이전에는 이 프리픽스를 고려하지 않은 채
+#   "Booking <n> 필드" 형태로만 파싱을 시도해 모든 줄을 건너뛰는 버그가 있었다.
+# 미확인: Bookings Get 단독 호출의 정확한 필드 레이아웃(현재 드라이버가 쓰지 않음,
+#   List와 동일한 컨벤션일 것으로 추정).
 def bookings_list(days: int = 1, day_offset: int = 0) -> str:
     return f"xCommand Bookings List Days: {days} DayOffset: {day_offset}"
 

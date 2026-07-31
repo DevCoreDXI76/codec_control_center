@@ -3,7 +3,8 @@ import asyncio
 import pytest
 import pytest_asyncio
 
-from app.core.driver_base import CalendarEntry
+from app.core.driver_base import CalendarEntry, DriverCommandError
+from app.drivers.poly import poly_commands as poly_cmd
 from app.drivers.poly.poly_driver import PolyDriver, _normalize_poly_datetime, _parse_uptime
 from app.simulator.poly_sim_server import PolySimServer, PolySSHSimServer
 
@@ -77,6 +78,89 @@ async def test_hangup_clears_call(sim_and_driver):
 
     status = await driver.get_status()
     assert status.in_call is False
+
+
+# --- 2026-07-31 VDI 실장비 검증: 예상 밖 응답을 조용히 False로 삼키지 않고 원문과 함께
+# DriverCommandError로 올린다(Cisco _check_result_ok와 동일한 원칙) — 예전에는 mute 실패가
+# 로그에 원인 없이 "실패"로만 남아 진단이 불가능했다.
+
+
+async def test_mute_raises_with_raw_response_on_mismatch():
+    driver = PolyDriver(host="127.0.0.1", port=1)
+    driver._call = lambda command: _async_return("some unexpected text")
+    with pytest.raises(DriverCommandError, match="some unexpected text"):
+        await driver.mute(True)
+
+
+async def test_dial_raises_with_raw_response_on_mismatch():
+    driver = PolyDriver(host="127.0.0.1", port=1)
+    driver._call = lambda command: _async_return("busy")
+    with pytest.raises(DriverCommandError, match="busy"):
+        await driver.dial("1234")
+
+
+async def test_hangup_raises_with_raw_response_on_mismatch():
+    driver = PolyDriver(host="127.0.0.1", port=1)
+    driver._call = lambda command: _async_return("no active call")
+    with pytest.raises(DriverCommandError, match="no active call"):
+        await driver.hangup()
+
+
+async def _async_return(value):
+    return value
+
+
+async def test_model_retried_on_next_poll_if_initially_unknown():
+    """connect() 시점의 모델 조회가 실패해도 "모델 확인 중..."에 영영 머무르지 않고
+    다음 get_status() 폴링에서 다시 시도해야 한다 (2026-07-31 VDI 실장비 검증에서
+    모델명이 계속 "확인 중"으로만 표시되던 문제)."""
+    driver = PolyDriver(host="127.0.0.1", port=1)
+    driver._model = None  # connect() 때 모델 조회가 실패했다고 가정
+
+    async def fake_call(command):
+        if command == poly_cmd.SYSTEMSETTING_GET_MODEL:
+            return 'systemsetting model "Group 700"'
+        if command == poly_cmd.MUTE_NEAR_GET:
+            return "mute near off"
+        if command == poly_cmd.UPTIME_GET:
+            return "1 Hour, 0 Minutes"
+        raise AssertionError(f"unexpected command in test stub: {command}")
+
+    async def fake_call_block(command, begin, end):
+        return ["system is not in a call"]
+
+    driver._call = fake_call
+    driver._call_block = fake_call_block
+
+    status = await driver.get_status()
+
+    assert status.model == "Group 700"
+    assert driver._model == "Group 700"
+
+
+async def test_model_not_refetched_once_known():
+    """모델을 이미 알고 있으면 매 폴링마다 다시 조회하지 않는다(불필요한 명령 낭비 방지)."""
+    driver = PolyDriver(host="127.0.0.1", port=1)
+    driver._model = "Group 700"
+    calls: list[str] = []
+
+    async def fake_call(command):
+        calls.append(command)
+        if command == poly_cmd.MUTE_NEAR_GET:
+            return "mute near off"
+        if command == poly_cmd.UPTIME_GET:
+            return "1 Hour, 0 Minutes"
+        raise AssertionError(f"unexpected command in test stub: {command}")
+
+    async def fake_call_block(command, begin, end):
+        return ["system is not in a call"]
+
+    driver._call = fake_call
+    driver._call_block = fake_call_block
+
+    await driver.get_status()
+
+    assert poly_cmd.SYSTEMSETTING_GET_MODEL not in calls
 
 
 async def test_reboot_returns_true_without_hanging(sim_and_driver):
