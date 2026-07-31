@@ -4,8 +4,21 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+
+KST = timezone(timedelta(hours=9))
+"""한국 표준시(UTC+9, 서머타임 없음) 고정 오프셋. Windows 실행 환경(PyInstaller onefile)에는
+tzdata 패키지가 없어 zoneinfo("Asia/Seoul")를 쓰면 ZoneInfoNotFoundError가 난다(2026-07-31
+확인) — 한국은 DST가 없으므로 고정 오프셋으로 충분하다."""
+
+
+def _to_kst_display(iso_utc: str) -> str:
+    """DB에는 timezone-aware UTC ISO 8601로 저장하고(모호함 없는 정규 형태), 화면에
+    보여줄 때만 KST로 변환한다. 제어 로그 시각이 UTC 그대로 노출돼 실제 한국 시간과
+    9시간 어긋나 보이던 문제(2026-07-31 VDI 2차 재테스트에서 지적됨)."""
+    return datetime.fromisoformat(iso_utc).astimezone(KST).strftime("%Y-%m-%d %H:%M:%S")
 
 
 SCHEMA_VERSION = 1
@@ -104,7 +117,7 @@ class ControlHistory:
                 action=row["action"],
                 success=bool(row["success"]),
                 detail=row["detail"],
-                created_at=row["created_at"],
+                created_at=_to_kst_display(row["created_at"]),
             )
             for row in rows
         ]

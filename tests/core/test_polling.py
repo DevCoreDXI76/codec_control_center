@@ -344,6 +344,69 @@ class _BoomDriver(DeviceDriver):
         return True
 
 
+class _SilentlyOfflineDriver(DeviceDriver):
+    """드라이버가 예외를 던지지 않고 get_status() 내부에서 DriverError를 스스로 잡아
+    online=False 상태만 반환하는 경우를 흉내낸다(PolyDriver.get_status()가 실제로 이렇게
+    동작함 — 2026-07-31 VDI 2차 재테스트에서 재현된 패턴)."""
+
+    def __init__(self) -> None:
+        self.connect_calls = 0
+
+    async def connect(self) -> None:
+        self.connect_calls += 1
+
+    async def disconnect(self) -> None:
+        pass
+
+    async def get_status(self) -> DeviceStatus:
+        return DeviceStatus(
+            online=False, in_call=False, muted=False, call_peer=None,
+            last_polled_at="now", error="desynced response",
+        )
+
+    async def mute(self, on: bool) -> bool:
+        return True
+
+    async def dial(self, address: str) -> bool:
+        return True
+
+    async def hangup(self) -> bool:
+        return True
+
+    async def reboot(self) -> bool:
+        return True
+
+    async def get_calendar_status(self) -> str:
+        return "registered"
+
+    async def get_obtp_entries(self) -> list[CalendarEntry]:
+        return []
+
+    async def join_meeting(self, entry: CalendarEntry) -> bool:
+        return True
+
+
+async def test_offline_status_without_exception_still_forces_reconnect_next_poll():
+    """get_status()가 예외 없이 online=False만 반환해도(연결은 안 끊긴 상태), 다음
+    폴링에서는 같은(깨진) 드라이버를 계속 재사용하지 말고 새로 연결해야 한다 — 안
+    그러면 재연결 없이 영구히 오프라인/오류에 머무른다(2026-07-31 확인된 회귀)."""
+    created: list[_SilentlyOfflineDriver] = []
+
+    def factory(device_id: str) -> _SilentlyOfflineDriver:
+        driver = _SilentlyOfflineDriver()
+        created.append(driver)
+        return driver
+
+    scheduler = PollingScheduler(driver_factory=factory, base_interval=10.0)
+    await scheduler.add_device("dev-1", interval=10.0)
+
+    await scheduler.poll_once("dev-1")
+    await scheduler.poll_once("dev-1")
+
+    assert len(created) == 2
+    assert created[1].connect_calls == 1
+
+
 async def test_unexpected_exception_marked_offline_not_raised(caplog):
     """DriverError가 아닌 버그성 예외도 삼키지 않고 로그로 남기되, 폴링 루프 자체는
     죽지 않고 오프라인 상태로 계속 재시도해야 한다."""

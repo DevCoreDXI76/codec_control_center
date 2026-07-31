@@ -172,9 +172,14 @@ class PolySimServer:
         if not self.state.in_call:
             return "system is not in a call"
         mute_word = "muted" if self.state.muted else "notmuted"
+        # 실장비 원문 형식(2026-07-31 VDI 2차 재테스트로 확인):
+        # "callinfo:<id>::<주소>:384:connected:...". call.id 다음 필드(index 2)가
+        # 비어 있고 주소는 index 3에 온다 — 예전엔 이 빈 필드 없이 index 2에 주소를
+        # 바로 넣어 시뮬레이터를 만들었는데, 그 잘못된 가정 때문에 드라이버가
+        # call_peer를 엉뚱한(항상 빈) 필드에서 읽던 버그가 한동안 안 잡혔다.
         line = (
-            f"callinfo:{self.state.call_id}:{self.state.call_peer}:"
-            f"{self.state.call_peer}:384:connected:{mute_word}:outgoing:videocall"
+            f"callinfo:{self.state.call_id}::{self.state.call_peer}:"
+            f"384:connected:{mute_word}:outgoing:videocall"
         )
         return "callinfo begin\r\n" + line + "\r\ncallinfo end"
 

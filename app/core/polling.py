@@ -225,6 +225,13 @@ class PollingScheduler:
             runtime.interval = min(
                 self.base_interval * (2**runtime.consecutive_failures), self.max_interval
             )
+            # driver.get_status()는 연결이 살아있는 채로 DriverError를 내부에서 잡아
+            # online=False 상태만 반환하는 경우가 있다(예: Poly가 응답 줄 정렬이 깨진
+            # 것을 감지했을 때 — 2026-07-31 VDI 2차 재테스트에서 재현). 그 경우 위 except
+            # 블록을 안 타서 runtime.driver가 그대로 남고, 다음 폴링도 같은(깨진) 연결을
+            # 계속 재사용해 영구히 오프라인/오류에 머무른다. 여기서도 동일하게 버려야
+            # 다음 폴링에서 새 연결로 재시도(자가 복구)한다.
+            runtime.driver = None
 
         runtime.last_status = status
         if self._on_status is not None:

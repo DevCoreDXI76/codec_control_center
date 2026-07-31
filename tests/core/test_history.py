@@ -23,6 +23,21 @@ def test_log_and_list_recent(history):
     assert entry.created_at
 
 
+def test_created_at_displayed_in_kst_not_utc(history, tmp_path):
+    """제어 로그 시각이 DB에는 UTC로 저장되지만 화면에는 KST(UTC+9)로 표시돼야 한다
+    (2026-07-31 VDI 2차 재테스트 — UTC 그대로 노출돼 실제 한국 시간과 9시간 어긋나 보이던 문제)."""
+    conn = sqlite3.connect(history.db_path)
+    conn.execute(
+        "INSERT INTO control_log (device_id, device_name, action, success, detail, created_at) "
+        "VALUES ('dev-1', 'x', 'mute', 1, NULL, '2026-07-31T07:14:14+00:00')"
+    )
+    conn.commit()
+    conn.close()
+
+    entry = history.list_recent()[0]
+    assert entry.created_at == "2026-07-31 16:14:14"
+
+
 def test_log_failure_with_detail(history):
     history.log(device_id="dev-1", device_name="x", action="reboot", success=False, detail="timeout")
     entry = history.list_recent()[0]

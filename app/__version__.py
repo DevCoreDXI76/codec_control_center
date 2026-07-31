@@ -71,7 +71,116 @@ CSS 추가. 설정 화면 하단·FastAPI 앱 타이틀에 남아있던 "Codec C
 `top` 오프셋이 1.25rem(20px)이라, 새로 sticky가 된 57px짜리 헤더 뒤에 가려진 상태로 붙어있던
 것이었음(스크롤 자체는 되고 있었으나 보이지 않았음). `top`을 `57px + 1.25rem`으로 옮겨 헤더
 바로 아래에 보이도록 수정.
+1.5.10 = VDI 2차 재테스트에서 Poly 장비의 "실제로는 통화중이 아닌데 계속 통화중으로
+표시"되는 문제가 재발했다고 재확인됨 — v1.5.3의 장비별 락 수정은 유효했지만 근본 원인의
+전부가 아니었음. 직접 확인 결과 실장비는 `callinfo all`에 "system is not in a call"로
+정상 응답했는데도(사용자가 별도 클라이언트로 직접 확인) 앱은 계속 통화중으로 표시했고,
+관련 오류 로그도 전혀 없었음 — 세션이 한 번이라도 어긋나면(예: 응답 줄 정렬이 밀리는 경우)
+`callinfo` 자리에 온 줄이 "system is not in a call"과 다르기만 하면 무조건 in_call=True로
+확정해버리던 fail-open 로직이 원인. `_call_block()`에 엄격 검증 모드를 추가해 "callinfo
+begin" 블록도 "system is not in a call"도 아닌 응답은 DriverCommandError로 올리도록
+수정(poly_driver.py). 이 과정에서 별개의 구조적 문제도 함께 발견: 드라이버가 예외를 던지지
+않고 get_status() 내부에서 스스로 삼켜 online=False만 반환하는 경우, PollingScheduler가
+연결을 재사용해 계속 같은(깨진) 세션으로 재시도만 하고 영영 재연결하지 않던 문제 —
+offline 상태를 받으면 항상 드라이버를 버리고 다음 폴링에서 새로 연결하도록 수정
+(polling.py). 추가로 제어 로그 시각이 UTC로 저장·표시돼 실제 한국 시간과 9시간 어긋나
+보이던 문제도 함께 수정 — 표시 시점에 KST(UTC+9 고정 오프셋)로 변환(history.py; Windows
+실행 환경엔 zoneinfo용 tzdata가 없어 zoneinfo 대신 고정 오프셋 사용).
+1.5.11 = v1.5.10 배포 직후 VDI에서 재현: 에러 메시지가 정확히 무엇이었는지 확인한 결과
+`unexpected response to 'callinfo all': 'Hi, my name is : 판교 6층 영상회의실'`였음 — Poly
+장비가 세션을 새로 열면 명령 요청과 무관하게 인사말 한 줄("Hi, my name is : <장비 이름>")을
+스스로 먼저 보내는데, 이게 도착하는 시점이 불규칙해(연결 직후일 수도, 몇 번의 폴링 뒤일 수도
+있음) v1.5.10의 엄격 검증에 매번 걸려 재연결해도 반복 실패하고 있었음. `_read_line()` 레벨에서
+이 인사말 줄을 만나면 무조건 버리고 다음 줄을 읽도록 수정(poly_driver.py) — 어느 명령의 응답
+자리에 끼어들든 투명하게 걸러진다.
+1.5.12 = v1.5.11로도 VDI에서 같은 계열 문제가 계속됨 — 이번엔 `unexpected response to
+'callinfo all': 'systemsetting get model'`. "systemsetting get model"은 모델을 아직 못 얻었을
+때 폴링마다 재전송되는 명령의 문자열 그대로였다. "채널이 방금 보낸 명령을 그대로 에코한다"는
+가설로 `_send()`에 보낸 명령을 기록해두고 `_read_line()`에서 같은 문자열이면 버리는 수정을
+시도했으나, 시뮬레이터 회귀 테스트에서 바로 깨짐이 드러남 — Poly의 mute on 명령은 정상
+성공 응답 자체가 명령과 동일한 문자열("mute near on")이라 이 방식은 정상 응답까지 에코로
+오인해 버려버린다(테스트가 없었다면 그대로 배포해 새 버그를 만들 뻔했다). 이 접근은 되돌리고,
+대신 문제가 재발했을 때 한 줄짜리 에러 메시지만으로 추측하지 않도록 최근 송수신 원문 몇 줄을
+`poly_driver.py`에 남겨뒀다가 검증 실패 시 `logger.warning()`으로 시스템 로그(`/logs`)에
+남기도록 추가(진단 강화, 동작 변경 없음) — 다음 재현 시 화면 캡처 대신 로그에서 전체 흐름을
+바로 확인할 수 있다. 이번 릴리즈는 근본 수정이 아니라 다음 재현을 정확히 진단하기 위한
+계측 추가다.
+1.5.13 = v1.5.12에서 추가한 진단 로그로 실제 송수신 원문 트레이스를 여러 건 확보 — 지금까지의
+개별 문자열 패치가 왜 계속 부족했는지 드러남. (1) 세션을 새로 열면 나오는 인사말이 "Hi, my name
+is : ..." 한 줄이 아니라 "Here is what I know about myself:" 등 몇 줄이 더 이어지는 여러 줄
+블록이었음(정확한 줄 수는 문서에 없어 예측 불가) — v1.5.11은 첫 줄만 걸렀던 것. (2) 모든
+트레이스에 빈 줄(´´)이 반복적으로 잡음으로 끼어들어 있었음 — 이 드라이버가 다루는 어떤 명령도
+빈 줄을 정상 응답으로 준 적이 없다. 이번엔 특정 문자열을 더 추가하는 대신 일반적인 방식으로
+수정: connect() 직후 명령을 보내기 전에 짧은 타임아웃으로 반복 읽어 조용해질 때까지 전부
+비우는 `_drain_startup_noise_*`를 추가해 인사말이 몇 줄이든 안전하게 흡수하고,
+`_read_line()`에서 빈 줄은 항상 잡음으로 간주해 버리도록 함(poly_driver.py). 진단 로그에서
+Teams 회의 목록 조회(`calendarmeetings list`)가 mute/callinfo 사이에 끼어드는 것도 관찰됐는데,
+락 자체는 걸려 있어 진짜 동시접속은 아니고 이전 호출이 응답을 덜 비운 채 넘어간 잔재로 보임 —
+이번 두 수정으로 상당 부분 같이 완화될 것으로 보이나 별도 확정 필요(다음 재현 로그로 확인 예정).
+1.5.14 = v1.5.13 배포 후 새 트레이스로 추가 확인: 장비 셸이 "-> " 프롬프트 뒤에 이전에 받은
+명령을 그대로 에코해 돌려보내는데, 이게 한두 교환 뒤늦게 나타나 mute/callinfo 응답 자리에
+끼어들고 있었음(예: "-> systemsetting get model", "-> calendarmeetings list "today""). 지금까지
+"-> "로 시작하는 줄이 실제 데이터였던 적은 한 번도 없어, `_read_line()`에서 이 프리픽스도
+무조건 잡음으로 걸러내도록 추가(poly_driver.py).
+같은 트레이스에서 `calendarmeetings list "today"`(Teams 회의 목록 조회)의 응답 블록
+("calendarmeetings list begin"~"end")이 조각나서 mute/callinfo 응답 자리에 나타나는 것도
+확인됨 — 이는 `get_obtp_entries()`가 자신의 응답을 끝까지 기다리지 않고(lenient
+`_call_block()`이 begin 마커가 아닌 첫 줄을 그냥 "응답"으로 받아들여버림) 그대로 반환해버려서,
+실제 응답이 뒤늦게 도착해 다음 호출들이 대신 주워가는 것으로 보임. 다만 calendarmeetings의
+"회의 없음" 실제 응답 형식이 실장비로 확인된 적이 없어(문서/실측 근거 없음) 추측으로 더 좁혀
+고치지 않았다 — 다음 VDI 라운드에서 실장비 원문 확보 필요(SCHEDULE.md 참고 대상에 추가할 것).
+1.5.15 = v1.5.14의 "calendarmeetings 회의 없음 응답 형식 미확인" 이슈를 사용자가 실장비에
+직접 접속해 확보한 원문으로 해소: `calendarmeetings list "today"`에 회의가 없으면
+"calendarmeetings list begin" 바로 뒤에 내용 없이 "calendarmeetings list end"가 옴(추측이
+아니라 실측 확인). v1.5.14의 "-> " 프롬프트 에코 필터가 이미 이 케이스를 올바르게 처리함을
+이 원문 그대로 회귀 테스트로 고정해 확인(코드 변경 없음, `tests/drivers/test_poly_driver.py`).
+1.5.16 = v1.5.15 배포 후 새 트레이스로 결정적인 패턴 확인: 응답이 명령보다 정확히 한 교환씩
+밀려 들어온다(mute의 진짜 응답이 callinfo 자리에서, model의 진짜 응답이 mute 자리에서 나오는
+식 — 같은 모양의 트레이스가 5회 이상 재현). 지금까지는 첫 줄이 기대와 다르면 (callinfo처럼)
+곧장 에러로 올리거나 (mute get처럼) 조용히 잘못된 값으로 받아들였는데, 둘 다 근본 대응이
+아니었다. `_call_expecting()`을 새로 추가해 응답이 그럴듯한지 확인하고, 아니면 최대 3줄까지
+더 읽어 밀려 들어온 진짜 응답을 찾도록 함 — mute get/set, model 조회, uptime 조회, dial,
+hangup에 모두 적용(poly_driver.py). 이번 라운드 3번(가짜 통화중 → 계속 오프라인 →
+프롬프트 에코)에 걸쳐 부분적으로만 대응했던 "응답 밀림" 문제를 이번에 일반적인 방식으로
+근본 해결.
+1.5.17 = Teams 연동/기능 체계적 테스트 라운드에서 발견된 버그 2건 수정.
+(1) Teams 회의 목록의 링크로 참가하면 Poly 2대 모두 "실패: 200"만 뜨고 원인 불명이었는데
+(직접 회의ID 다이얼은 정상) — `join_meeting()`이 `dial()`/`hangup()`/`mute()`와 달리
+`_call_expecting()`(응답 밀림 대응)을 안 쓰고 예전 `_call()`을 그대로 쓰고 있던 게 원인.
+dial()과 동일하게 수정해 응답이 밀려도 성공을 인식하고, 실패 시엔 원문을 담아 예외로 올리도록
+함(예전엔 조용히 False만 반환해 "실패: 200"으로만 보였음).
+(2) v1.5.16 배포 후에도 "unexpected response" 오류가 간헐적으로 재발 — `/logs` 원문으로
+확인한 결과 세션이 스스로 보내는 자기소개 블록이 "Hi, my name is" 한두 줄이 아니라
+Model/Software Version/Build Information/Contact Number/Total Calls/Total Time In
+Calls/SNTP Time Service/Local Time is/IP Video Number/MP Enabled/H323 Enabled까지 13줄
+넘게 이어지고, 연결 직후가 아니라 세션 중 아무 때나(다음 명령을 받아야 밀린 출력을 내보내는
+것으로 추정) 통째로 끼어들 수 있음이 확인됨. 응답 밀림 재시도 한도(`_MAX_LAG_SKIPS`)를
+3 → 25로 확대. 모델 정보가 이 자기소개 블록 안에 "Model: 값" 형태로도 나옴을 확인해
+`_fetch_model()`이 이 형식도 인식하도록 수정.
+1.5.18 = v1.5.17 배포 후에도 Poly Teams 링크 참가가 재현("timeout waiting for device
+response"). 실제 원문 확인 결과 `join_meeting()`이 쓰던 `dial phone sip "..."`
+(cmd.dial_phone)에 장비가 `info: AUDIO call not enabled`로 응답(거부)하고 있었음 —
+응답이 밀린 잡음이 아니라 장비의 진짜 거부 응답이었는데, `_call_expecting`의 재시도
+로직이 이를 잡음으로 보고 계속 건너뛰다 결국 응답이 끊겨 타임아웃으로만 보였던 것.
+두 가지로 수정(poly_driver.py): (1) join_meeting()이 direct-dial(dial())과 동일하게
+검증된 `dial manual`(cmd.dial_manual)을 쓰도록 변경, (2) `_call_expecting()`이 "info: "로
+시작하는 줄은 밀림 잡음으로 건너뛰지 않고 곧장 반환하도록 수정 — 앞으로 비슷한 장비 거부
+응답은 타임아웃 대신 즉시 원문과 함께 보고된다.
+1.5.19 = Teams 연동 라운드 3차 피드백 반영.
+(1) **안전 문제**: Cisco 장비에서 통화 중에 회의 링크를 또 클릭하거나 direct-dial을 실행하면
+같은 회의에 중복 참가되며 하울링이 발생하는 사고 확인 — 통화 중(`card.dataset.inCall==1`)일
+때는 링크 참가/direct-dial을 프런트엔드에서 막고 안내 토스트를 띄우도록 수정
+(dashboard.js). 사용자가 실수로 누르는 경우를 막기 위함.
+(2) Poly 카드는 통화 중에도 Cisco와 달리 회의 제목이 안 뜨던 문제 — 실장비 원문
+("callinfo:1::1330378709@vc.poscodx.com:384:connected:notmuted:outgoing:videocall")으로
+확인한 결과 call.id 다음 필드(index 2)가 비어 있고 실제 주소는 index 3에 있는데, 기존 코드는
+index 2를 읽고 있어 call_peer가 항상 빈 문자열이었음(그래서 Teams 목록과 매칭이 안 돼 제목이
+안 떴음) — index 3으로 수정(poly_driver.py). 시뮬레이터도 이 필드 배치를 반영해 실장비와
+맞춤(poly_sim_server.py) — 예전 시뮬레이터는 이 빈 필드 없이 만들어졌던 잘못된 가정이었음.
+(3) Poly 회의 참가 후 잠깐 오프라인처럼 보였다가 몇 초 뒤 통화중으로 돌아오는 현상은 이번
+라운드에서 추가한 자가복구(응답 밀림 감지 시 오프라인 처리 후 재연결) 메커니즘이 의도대로
+동작하는 것으로 보임 — 다음에 재현되면 정확한 메시지를 확보해 재검토.
 이후 실장비 검증(Phase③)에서 드러나는 수정은 patch(1.x.y), 기능 추가는 minor(1.x.0)로 올린다.
 """
 
-__version__ = "1.5.9"
+__version__ = "1.5.19"

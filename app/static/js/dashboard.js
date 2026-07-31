@@ -411,6 +411,13 @@ async function loadUpcomingMeetings() {
 
 async function joinMeetingLink(ev, deviceId, entry) {
   ev.preventDefault();
+  const card = document.querySelector(`[data-device-id="${deviceId}"]`);
+  if (card && card.dataset.inCall === "1") {
+    // 통화 중에 회의 링크를 또 누르면 같은 회의에 중복 참가되면서 하울링이 나는 사고가
+    // 실제로 있었다(2026-07-31 VDI 2차 재테스트, Cisco 장비) — 실수로 누르는 경우를 막는다.
+    showToast("이미 통화 중입니다 — 먼저 종료 후 참가해주세요");
+    return;
+  }
   const ok = await callControl(deviceId, "join", entry);
   if (ok) {
     showToast(`"${entry.subject}" 참가 명령 전송됨`);
@@ -482,6 +489,12 @@ function formatLastReboot(uptimeSeconds) {
 
 async function directDial(deviceId, btn) {
   const card = btn.closest(".device-card");
+  if (card.dataset.inCall === "1") {
+    // joinMeetingLink와 동일한 이유 — 통화 중에 direct-dial까지 또 걸리면 같은 회의에
+    // 중복 참가되며 하울링이 난다(2026-07-31 VDI 2차 재테스트, Cisco 장비에서 실제 발생).
+    showToast("이미 통화 중입니다 — 먼저 종료 후 다이얼해주세요");
+    return;
+  }
   const idInput = card.querySelector('[data-field="dial-id-input"]');
   const tenantInput = card.querySelector('[data-field="dial-tenant-input"]');
   const meetingId = idInput.value.trim();
