@@ -13,7 +13,7 @@
   function getPreferredTheme() {
     const stored = getStoredTheme();
     if (stored === "light" || stored === "dark") return stored;
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    return "dark"; // 최초 설치 시 OS 설정과 무관하게 다크모드로 시작
   }
 
   function applyTheme(theme) {
