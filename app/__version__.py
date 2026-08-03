@@ -206,7 +206,9 @@ UTC(Z 접미사)로 내려주는 회의 시간을 그대로 표시하고 있어 
 "통화 중 중복 참가 방지" 가드가 인스턴스별 폴링 캐시(최대 120초 지연)에만 의존해 다른 PC의
 조작을 놓칠 수 있는 레이스 윈도우를 확인 — 재부팅/다이얼/direct-dial/join 실행 직전 서버가
 그 순간 장비 상태를 fresh하게 재확인해, 통화 중이면 명령을 보내지 않고 409로 차단하도록
-수정(`routes_control.py`, `routes_teams.py`, 신규 `DriverConflictError`). 설계 근거는
+수정(`routes_control.py`, `routes_teams.py`, 신규 `DriverConflictError`). 장비 상태 자체를
+확인할 수 없는 경우(오프라인/응답없음)도 "통화 중 아님"으로 오인하지 않도록 동일하게
+409로 차단한다(fail-closed). 설계 근거는
 docs/superpowers/specs/2026-08-03-multi-instance-control-race-guard-design.md.
 """
 

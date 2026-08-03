@@ -123,8 +123,9 @@ def test_mute_unknown_device_404(client):
 class _InCallAwareDriver(DeviceDriver):
     """get_status()의 in_call을 자유롭게 설정해 가드 로직만 독립적으로 검증하기 위한 가짜 드라이버."""
 
-    def __init__(self, in_call: bool = False) -> None:
+    def __init__(self, in_call: bool = False, online: bool = True) -> None:
         self.in_call = in_call
+        self.online = online
         self.reboot_called = False
         self.dialed_address: str | None = None
 
@@ -135,7 +136,7 @@ class _InCallAwareDriver(DeviceDriver):
         pass
 
     async def get_status(self) -> DeviceStatus:
-        return DeviceStatus(online=True, in_call=self.in_call, muted=False, call_peer=None, last_polled_at="now")
+        return DeviceStatus(online=self.online, in_call=self.in_call, muted=False, call_peer=None, last_polled_at="now")
 
     async def mute(self, on: bool) -> bool:
         return True
@@ -260,4 +261,28 @@ def test_dial_blocked_when_in_call(client):
 
     assert resp.status_code == 409
     assert "이미 통화 중" in resp.json()["detail"]
+    assert driver.dialed_address is None
+    entries = app.state.history.list_recent()
+    assert len(entries) == 1
+    assert entries[0].action == "dial"
+    assert entries[0].success is False
+
+
+def test_reboot_blocked_when_status_unreadable(client):
+    driver = _InCallAwareDriver(online=False, in_call=False)
+    device_id = _register_device_with_driver(driver)
+
+    resp = client.post(f"/api/devices/{device_id}/reboot")
+
+    assert resp.status_code == 409
+    assert driver.reboot_called is False
+
+
+def test_dial_blocked_when_status_unreadable(client):
+    driver = _InCallAwareDriver(online=False, in_call=False)
+    device_id = _register_device_with_driver(driver)
+
+    resp = client.post(f"/api/devices/{device_id}/dial", json={"address": "1234@example.com"})
+
+    assert resp.status_code == 409
     assert driver.dialed_address is None

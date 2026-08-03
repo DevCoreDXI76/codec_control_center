@@ -44,10 +44,18 @@ async def reject_if_in_call(driver: DeviceDriver) -> None:
     폴링 캐시(최대 120초 지연)를 믿지 않고 매번 fresh하게 물어본다 — 여러 PC가 각자
     독립적으로 이 장비를 조작할 수 있어, 캐시만 믿으면 다른 PC가 방금 시작한 통화를
     놓치고 중복 참가/오재부팅으로 이어질 수 있다(2026-08 다중 PC 배포 이후 확인된 리스크,
-    docs/superpowers/specs/2026-08-03-multi-instance-control-race-guard-design.md)."""
+    docs/superpowers/specs/2026-08-03-multi-instance-control-race-guard-design.md).
+
+    장비가 오프라인/응답불가라 실제 통화 여부를 확인할 수 없을 때도 fail-closed로
+    차단한다 — Poly 세션 응답 밀림/타임아웃으로 get_status()가 예외 없이
+    online=False만 반환하는 경우(poly_driver.py, cisco_driver.py) "통화 중 아님"과
+    "확인 불가"가 구분되지 않으므로, 확인 불가 상태를 안전한 쪽으로 취급하지 않는다
+    (2026-08 최종 리뷰에서 확인된 fail-open 위험, 사용자 확정 정책: 4개 명령 모두 차단)."""
     status = await driver.get_status()
     if status.in_call:
         raise DriverConflictError("다른 위치에서 이미 통화 중입니다 — 종료 후 다시 시도해주세요")
+    if not status.online:
+        raise DriverConflictError("장비 상태를 확인할 수 없어 명령을 보내지 않았습니다 — 잠시 후 다시 시도해주세요")
 
 
 @router.get("/{device_id}/status")
