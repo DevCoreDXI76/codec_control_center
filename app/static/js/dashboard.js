@@ -293,14 +293,24 @@ async function openEditDevice(deviceId) {
 
 const deviceMeetingsCache = new Map();
 
+function nowKstNaiveIso() {
+  // 회의 시작/종료 시각은 오프셋 없는 KST naive 문자열로 내려온다(Cisco는 UTC를 KST로
+  // 변환, Poly는 원래 naive KST — cisco_driver.py `_cisco_utc_to_kst_naive` 참고).
+  // `now`도 같은 형식으로 맞춰야 문자열 비교(>=)가 자정 경계를 포함해 올바르게 동작한다.
+  // `new Date().toISOString()`을 그대로 쓰면 UTC라서 9시간 어긋난 비교가 된다
+  // (2026-08-03 VDI 재테스트에서 지적됨).
+  const kstMs = Date.now() + 9 * 60 * 60 * 1000;
+  return new Date(kstMs).toISOString().slice(0, 19);
+}
+
 async function fetchDeviceMeetings(deviceId) {
   try {
     const resp = await fetch(`/api/devices/${deviceId}/obtp`);
     if (!resp.ok) return [];
     const data = await resp.json();
     if (!data.supported) return [];
-    const now = new Date().toISOString();
-    const upcoming = data.entries.filter((entry) => entry.start_time >= now || entry.end_time >= now);
+    const now = nowKstNaiveIso();
+    const upcoming = data.entries.filter((entry) => entry.end_time >= now);
     upcoming.sort((a, b) => a.start_time.localeCompare(b.start_time));
     return upcoming;
   } catch (e) {
@@ -310,6 +320,10 @@ async function fetchDeviceMeetings(deviceId) {
 
 function formatMeetingTime(isoString) {
   return isoString.replace("T", " ").slice(11, 16);
+}
+
+function formatMeetingTimeRange(entry) {
+  return `${formatMeetingTime(entry.start_time)}~${formatMeetingTime(entry.end_time)}`;
 }
 
 const MEETINGS_SORT_KEY = "bridgex.meetings.sort";
@@ -435,7 +449,7 @@ function renderMeetingsTable() {
     const tr = document.createElement("tr");
 
     const timeTd = document.createElement("td");
-    timeTd.textContent = formatMeetingTime(row.entry.start_time);
+    timeTd.textContent = formatMeetingTimeRange(row.entry);
     tr.appendChild(timeTd);
 
     const roomTd = document.createElement("td");

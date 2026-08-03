@@ -3,7 +3,7 @@ import pytest_asyncio
 
 from app.core.driver_base import CalendarEntry, DriverCommandError, DriverTimeoutError
 from app.drivers.cisco import cisco_commands as cisco_cmd
-from app.drivers.cisco.cisco_driver import CiscoDriver, _check_result_ok, _parse_bookings_list
+from app.drivers.cisco.cisco_driver import CiscoDriver, _check_result_ok, _cisco_utc_to_kst_naive, _parse_bookings_list
 from app.simulator.cisco_sim_server import CiscoSimServer
 
 
@@ -302,9 +302,24 @@ def test_parse_bookings_list_real_device_response():
     assert len(entries) == 1
     entry = entries[0]
     assert entry.subject == "[회의실 예약] test"
-    assert entry.start_time == "2026-07-31T04:30:00Z"
-    assert entry.end_time == "2026-07-31T06:00:00Z"
+    # Cisco Bookings List는 UTC(Z 접미사)로 온다(실장비 원문으로 확인) — Poly와 동일하게
+    # 프런트엔드가 다루는 naive KST 로컬시각으로 변환해서 담는다. 04:30 UTC = 13:30 KST.
+    assert entry.start_time == "2026-07-31T13:30:00"
+    assert entry.end_time == "2026-07-31T15:00:00"
     assert entry.join_uri == "1314657531@vc.poscodx.com"
+
+
+def test_cisco_utc_to_kst_naive_converts_offset_correctly():
+    assert _cisco_utc_to_kst_naive("2026-07-31T04:30:00Z") == "2026-07-31T13:30:00"
+
+
+def test_cisco_utc_to_kst_naive_rolls_over_midnight():
+    assert _cisco_utc_to_kst_naive("2026-07-31T20:00:00Z") == "2026-08-01T05:00:00"
+
+
+def test_cisco_utc_to_kst_naive_returns_raw_on_unparseable_input():
+    assert _cisco_utc_to_kst_naive("not-a-timestamp") == "not-a-timestamp"
+    assert _cisco_utc_to_kst_naive("") == ""
 
 
 def test_parse_bookings_list_empty_when_no_bookings():

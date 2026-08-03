@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import re
 import socket
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import paramiko
 
@@ -290,6 +290,27 @@ def _check_result_ok(lines: list[str], expected_prefix: str) -> bool:
 _BOOKINGS_LIST_PREFIX = "*r BookingsListResult "
 _BOOKING_FIELD_RE = re.compile(r"^Booking (\d+) (.+)$")
 
+_KST = timezone(timedelta(hours=9))
+"""한국 표준시(UTC+9, 서머타임 없음) 고정 오프셋. Windows 실행 환경(PyInstaller onefile)에는
+tzdata 패키지가 없어 zoneinfo("Asia/Seoul")를 쓰면 ZoneInfoNotFoundError가 난다
+(app/core/history.py의 _to_kst_display와 동일한 이유) — 한국은 DST가 없으므로 고정
+오프셋으로 충분하다."""
+
+
+def _cisco_utc_to_kst_naive(raw: str) -> str:
+    """Cisco Bookings List/Get의 시간 필드는 UTC ISO 8601("...Z" 접미사)로 온다(2026-07-31
+    VDI 실장비 원문으로 확인 — 예: "2026-07-31T04:30:00Z"). 그대로 화면에 표시하면 실제
+    한국시간보다 9시간 이른 값으로 보인다(예: 실제 13:30 KST 회의가 04:30로 표시됨 —
+    2026-08-03 VDI 재테스트에서 지적됨). Poly(_normalize_poly_datetime)는 오프셋 없는
+    naive KST 문자열을 만들므로, 프런트엔드가 두 벤더를 동일하게 다룰 수 있도록 여기서도
+    UTC→KST 변환 후 naive 문자열로 맞춘다. 파싱 실패(형식이 예상과 다름) 시 원문을 그대로
+    반환한다 — 잘못된 시간이라도 표시가 아예 사라지는 것보다는 원인 파악이 쉽다."""
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return raw
+    return parsed.astimezone(_KST).replace(tzinfo=None).isoformat()
+
 
 def _parse_bookings_list(list_lines: list[str]) -> list[CalendarEntry]:
     """"*r BookingsListResult Booking <n> <필드경로>: "<값>"" 형태의 줄들을
@@ -315,8 +336,8 @@ def _parse_bookings_list(list_lines: list[str]) -> list[CalendarEntry]:
         entries.append(
             CalendarEntry(
                 subject=fields.get("Title", ""),
-                start_time=fields.get("Time StartTime", ""),
-                end_time=fields.get("Time EndTime", ""),
+                start_time=_cisco_utc_to_kst_naive(fields.get("Time StartTime", "")),
+                end_time=_cisco_utc_to_kst_naive(fields.get("Time EndTime", "")),
                 join_uri=fields.get("DialInfo Calls Call 1 Number"),
             )
         )
