@@ -97,6 +97,12 @@ def test_driver_error_hierarchy():
     assert issubclass(DriverConnectionError, DriverError)
 
 
+def test_driver_conflict_error_is_a_driver_error():
+    from app.core.driver_base import DriverConflictError
+
+    assert issubclass(DriverConflictError, DriverError)
+
+
 def test_device_status_model_and_uptime_default_to_none():
     status = DeviceStatus(online=True, in_call=False, muted=False, call_peer=None, last_polled_at="now")
     assert status.model is None
