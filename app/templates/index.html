@@ -55,6 +55,19 @@
         <div id="meetings-list" class="meetings-list">
           <p class="meta">불러오는 중...</p>
         </div>
+        <div id="meetings-pagination" class="meetings-pagination" style="display:none">
+          <div class="meetings-page-size">
+            <span class="meta">한 화면에</span>
+            <button class="btn page-size-btn" data-size="5" onclick="setMeetingsPageSize(5)">5개</button>
+            <button class="btn page-size-btn" data-size="10" onclick="setMeetingsPageSize(10)">10개</button>
+            <button class="btn page-size-btn" data-size="20" onclick="setMeetingsPageSize(20)">20개</button>
+          </div>
+          <div class="meetings-page-nav">
+            <button class="btn" onclick="changeMeetingsPage(-1)">‹ 이전</button>
+            <span id="meetings-page-label" class="meta"></span>
+            <button class="btn" onclick="changeMeetingsPage(1)">다음 ›</button>
+          </div>
+        </div>
       </div>
       {% endif %}
 
