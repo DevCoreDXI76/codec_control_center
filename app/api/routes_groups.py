@@ -34,11 +34,14 @@ async def list_groups(request: Request) -> list[GroupResponse]:
     return [GroupResponse(name=name, device_count=count) for name, count in sorted(counts.items())]
 
 
-@router.patch("/{name}")
+@router.patch("/{name:path}")
 async def rename_group(name: str, payload: GroupRenameRequest, request: Request) -> dict:
+    new_name = payload.new_name.strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="new_name must not be empty")
     registry = _get_registry(request)
     try:
-        count = registry.rename_group(name, payload.new_name)
+        count = registry.rename_group(name, new_name)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
@@ -46,7 +49,7 @@ async def rename_group(name: str, payload: GroupRenameRequest, request: Request)
     return {"device_count": count}
 
 
-@router.delete("/{name}")
+@router.delete("/{name:path}")
 async def delete_group(name: str, request: Request) -> dict:
     registry = _get_registry(request)
     try:

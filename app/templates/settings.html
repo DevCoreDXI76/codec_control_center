@@ -142,7 +142,11 @@
           async remove(g) {
             if (!confirm(`&quot;${g.name}&quot; 그룹 태그를 ${g.device_count}대 장비에서 제거합니다. 장비 자체는 삭제되지 않습니다. 계속할까요?`)) return;
             const resp = await fetch(`/api/groups/${encodeURIComponent(g.name)}`, { method: 'DELETE' });
-            if (resp.ok) await this.load();
+            if (resp.ok) {
+              await this.load();
+            } else {
+              this.error = '삭제 실패';
+            }
           },
         }"
         x-init="load()"
@@ -165,7 +169,7 @@
                   <button class="btn" type="button" @click="startEdit(g)" title="이름 수정">✎</button>
                 </template>
                 <template x-if="editingName === g.name">
-                  <button class="btn btn-primary" type="button" @click="saveEdit(g.name)">저장</button>
+                  <button class="btn btn-primary" type="button" @click="saveEdit(g.name)" :disabled="!editValue.trim()">저장</button>
                 </template>
                 <template x-if="editingName === g.name">
                   <button class="btn" type="button" @click="cancelEdit()">취소</button>

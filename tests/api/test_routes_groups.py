@@ -88,3 +88,42 @@ def test_delete_group_removes_tag_but_keeps_device(client):
 def test_delete_group_unknown_returns_404(client):
     resp = client.delete("/api/groups/no-such-group")
     assert resp.status_code == 404
+
+
+def test_rename_group_with_slash_in_name(client):
+    _add_device("A", "3F/A동")
+    resp = client.patch("/api/groups/3F/A동", json={"new_name": "3층A"})
+    assert resp.status_code == 200
+    assert resp.json() == {"device_count": 1}
+    assert client.get("/api/groups").json() == [{"name": "3층A", "device_count": 1}]
+
+
+def test_delete_group_with_slash_in_name(client):
+    _add_device("A", "3F/A동")
+    resp = client.delete("/api/groups/3F/A동")
+    assert resp.status_code == 200
+    assert resp.json() == {"device_count": 1}
+    devices = client.get("/api/devices").json()
+    assert devices[0]["group"] == ""
+
+
+def test_rename_group_empty_name_returns_400(client):
+    _add_device("A", "3F")
+    resp = client.patch("/api/groups/3F", json={"new_name": ""})
+    assert resp.status_code == 400
+    # group must be untouched
+    assert client.get("/api/groups").json() == [{"name": "3F", "device_count": 1}]
+
+
+def test_rename_group_whitespace_only_name_returns_400(client):
+    _add_device("A", "3F")
+    resp = client.patch("/api/groups/3F", json={"new_name": "   "})
+    assert resp.status_code == 400
+    assert client.get("/api/groups").json() == [{"name": "3F", "device_count": 1}]
+
+
+def test_rename_group_trims_whitespace(client):
+    _add_device("A", "3F")
+    resp = client.patch("/api/groups/3F", json={"new_name": "  실제이름  "})
+    assert resp.status_code == 200
+    assert client.get("/api/groups").json() == [{"name": "실제이름", "device_count": 1}]
