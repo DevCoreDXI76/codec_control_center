@@ -20,8 +20,10 @@ from app.main import app
 
 
 class FakeTeamsDriver(DeviceDriver):
-    def __init__(self, calendar_supported: bool = True) -> None:
+    def __init__(self, calendar_supported: bool = True, in_call: bool = False, online: bool = True) -> None:
         self.calendar_supported = calendar_supported
+        self.in_call = in_call
+        self.online = online
         self.joined_entry: CalendarEntry | None = None
         self.dialed_address: str | None = None
 
@@ -32,7 +34,7 @@ class FakeTeamsDriver(DeviceDriver):
         pass
 
     async def get_status(self) -> DeviceStatus:
-        return DeviceStatus(online=True, in_call=False, muted=False, call_peer=None, last_polled_at="now")
+        return DeviceStatus(online=self.online, in_call=self.in_call, muted=False, call_peer=None, last_polled_at="now")
 
     async def mute(self, on: bool) -> bool:
         return True
@@ -87,7 +89,13 @@ def client(tmp_path):
     return TestClient(app)
 
 
-def _register(client, calendar_supported: bool = True, teams_tenant_address: str | None = None) -> tuple[str, FakeTeamsDriver]:
+def _register(
+    client,
+    calendar_supported: bool = True,
+    teams_tenant_address: str | None = None,
+    in_call: bool = False,
+    online: bool = True,
+) -> tuple[str, FakeTeamsDriver]:
     credential_ref = app.state.vault.store('{"username":"admin","password":"pw"}')
     device = app.state.registry.add_device(
         name="테스트 회의실",
@@ -100,7 +108,7 @@ def _register(client, calendar_supported: bool = True, teams_tenant_address: str
         is_simulated=True,
         teams_tenant_address=teams_tenant_address,
     )
-    fake_driver = FakeTeamsDriver(calendar_supported=calendar_supported)
+    fake_driver = FakeTeamsDriver(calendar_supported=calendar_supported, in_call=in_call, online=online)
     app.state.scheduler = PollingScheduler(driver_factory=lambda device_id: fake_driver)
     asyncio.run(app.state.scheduler.add_device(device.id))
     return device.id, fake_driver
@@ -259,3 +267,55 @@ def test_direct_dial_logs_to_history(client):
     assert len(entries) == 1
     assert entries[0].action == "direct_dial"
     assert entries[0].success is True
+
+
+def test_join_meeting_blocked_when_in_call(client):
+    device_id, driver = _register(client, in_call=True)
+    resp = client.post(
+        f"/api/devices/{device_id}/join",
+        json={
+            "subject": "주간 전체회의",
+            "start_time": "2026-07-29T14:00:00",
+            "end_time": "2026-07-29T15:00:00",
+            "join_uri": "sip:weekly@example.com",
+        },
+    )
+    assert resp.status_code == 409
+    assert driver.joined_entry is None
+    entries = app.state.history.list_recent()
+    assert len(entries) == 1
+    assert entries[0].action == "join"
+    assert entries[0].success is False
+
+
+def test_direct_dial_blocked_when_in_call(client):
+    device_id, driver = _register(client, teams_tenant_address="vc.poscodx.com", in_call=True)
+    resp = client.post(f"/api/devices/{device_id}/direct-dial", json={"meeting_id": "1234567890"})
+    assert resp.status_code == 409
+    assert driver.dialed_address is None
+    entries = app.state.history.list_recent()
+    assert len(entries) == 1
+    assert entries[0].action == "direct_dial"
+    assert entries[0].success is False
+
+
+def test_join_meeting_blocked_when_status_unreadable(client):
+    device_id, driver = _register(client, online=False)
+    resp = client.post(
+        f"/api/devices/{device_id}/join",
+        json={
+            "subject": "주간 전체회의",
+            "start_time": "2026-07-29T14:00:00",
+            "end_time": "2026-07-29T15:00:00",
+            "join_uri": "sip:weekly@example.com",
+        },
+    )
+    assert resp.status_code == 409
+    assert driver.joined_entry is None
+
+
+def test_direct_dial_blocked_when_status_unreadable(client):
+    device_id, driver = _register(client, teams_tenant_address="vc.poscodx.com", online=False)
+    resp = client.post(f"/api/devices/{device_id}/direct-dial", json={"meeting_id": "1234567890"})
+    assert resp.status_code == 409
+    assert driver.dialed_address is None

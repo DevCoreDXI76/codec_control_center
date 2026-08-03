@@ -16,7 +16,8 @@ import re
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from app.core.driver_base import CalendarEntry, DriverError
+from app.core.driver_base import CalendarEntry, DriverConflictError, DriverError
+from app.api.routes_control import reject_if_in_call
 from app.core.history import ControlHistory
 from app.core.polling import PollingScheduler
 from app.core.registry import DeviceRegistry
@@ -83,10 +84,18 @@ async def join_meeting(device_id: str, payload: JoinRequest, request: Request) -
         end_time=payload.end_time,
         join_uri=payload.join_uri,
     )
+
+    async def guarded(driver):
+        await reject_if_in_call(driver)
+        return await driver.join_meeting(entry)
+
     try:
-        ok = await _get_scheduler(request).run_with_driver(device_id, lambda driver: driver.join_meeting(entry))
+        ok = await _get_scheduler(request).run_with_driver(device_id, guarded)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="device not found") from exc
+    except DriverConflictError as exc:
+        history.log(device_id=device_id, device_name=device_name, action="join", success=False, detail=str(exc))
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except DriverError as exc:
         history.log(device_id=device_id, device_name=device_name, action="join", success=False, detail=str(exc))
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -118,9 +127,16 @@ async def direct_dial(device_id: str, payload: DirectDialRequest, request: Reque
     history: ControlHistory = request.app.state.history
 
     try:
-        ok = await _get_scheduler(request).run_with_driver(device_id, lambda driver: driver.dial(address))
+        async def guarded(driver):
+            await reject_if_in_call(driver)
+            return await driver.dial(address)
+
+        ok = await _get_scheduler(request).run_with_driver(device_id, guarded)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="device not found") from exc
+    except DriverConflictError as exc:
+        history.log(device_id=device_id, device_name=device.name, action="direct_dial", success=False, detail=str(exc))
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except DriverError as exc:
         history.log(device_id=device_id, device_name=device.name, action="direct_dial", success=False, detail=str(exc))
         raise HTTPException(status_code=502, detail=str(exc)) from exc

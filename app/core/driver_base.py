@@ -49,6 +49,10 @@ class DriverTimeoutError(DriverError):
     """명령/연결 타임아웃."""
 
 
+class DriverConflictError(DriverError):
+    """다른 위치(다른 PC 인스턴스 등)에서 이미 통화 중이라 명령을 거부함."""
+
+
 class DeviceDriver(ABC):
     """모든 제조사 드라이버가 구현해야 하는 공통 인터페이스."""
 
