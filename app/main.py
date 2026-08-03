@@ -16,6 +16,7 @@ from fastapi.templating import Jinja2Templates
 from app.__version__ import __version__
 from app.api.routes_control import router as control_router
 from app.api.routes_devices import router as devices_router
+from app.api.routes_groups import router as groups_router
 from app.api.routes_logs import router as logs_router
 from app.api.routes_settings import router as settings_router
 from app.api.routes_teams import router as teams_router
@@ -121,6 +122,7 @@ app.state.scheduler = PollingScheduler(
 )
 
 app.include_router(devices_router)
+app.include_router(groups_router)
 app.include_router(control_router)
 app.include_router(teams_router)
 app.include_router(settings_router)
