@@ -83,6 +83,38 @@ class DeviceRegistry:
         devices = [d for d in self._read() if d.id != device_id]
         self._write(devices)
 
+    def rename_group(self, old_name: str, new_name: str) -> int:
+        """old_name을 가진 모든 장비의 group을 new_name으로 바꾼다. 반환값은 변경된
+        장비 수. old_name을 가진 장비가 없으면 KeyError(update_device의 미존재 id
+        처리와 동일 패턴), new_name이 이미 다른 그룹으로 쓰이고 있으면 ValueError로
+        차단한다(병합하지 않음)."""
+        devices = self._read()
+        matching_ids = {d.id for d in devices if d.group == old_name}
+        if not matching_ids:
+            raise KeyError(f"no devices found in group {old_name!r}")
+        if any(d.group == new_name for d in devices if d.id not in matching_ids):
+            raise ValueError(f"group {new_name!r} already exists")
+        devices = [
+            dataclasses.replace(d, group=new_name) if d.id in matching_ids else d
+            for d in devices
+        ]
+        self._write(devices)
+        return len(matching_ids)
+
+    def clear_group(self, name: str) -> int:
+        """name을 가진 모든 장비의 group을 ""로 비운다(장비 자체는 삭제하지 않음).
+        반환값은 변경된 장비 수. name을 가진 장비가 없으면 KeyError."""
+        devices = self._read()
+        matching_ids = {d.id for d in devices if d.group == name}
+        if not matching_ids:
+            raise KeyError(f"no group named {name!r}")
+        devices = [
+            dataclasses.replace(d, group="") if d.id in matching_ids else d
+            for d in devices
+        ]
+        self._write(devices)
+        return len(matching_ids)
+
     def _read(self) -> list[Device]:
         raw = self.store_path.read_bytes()
         if not raw:

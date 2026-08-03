@@ -170,3 +170,43 @@ def test_reads_legacy_device_without_model_field(tmp_path):
     assert len(devices) == 1
     assert devices[0].model is None
     assert devices[0].teams_tenant_address is None
+
+
+def test_rename_group_updates_all_matching_devices(registry):
+    _add_sample(registry, name="A", group="3F")
+    _add_sample(registry, name="B", group="3F")
+    _add_sample(registry, name="C", group="5F")
+    count = registry.rename_group("3F", "3층")
+    assert count == 2
+    groups = {d.group for d in registry.list_devices()}
+    assert groups == {"3층", "5F"}
+
+
+def test_rename_group_blocks_when_target_name_exists(registry):
+    _add_sample(registry, name="A", group="3F")
+    _add_sample(registry, name="B", group="5F")
+    with pytest.raises(ValueError):
+        registry.rename_group("3F", "5F")
+    # 차단되면 원래 상태 그대로 유지돼야 한다
+    groups = {d.group for d in registry.list_devices()}
+    assert groups == {"3F", "5F"}
+
+
+def test_rename_group_unknown_name_raises_keyerror(registry):
+    with pytest.raises(KeyError):
+        registry.rename_group("no-such-group", "x")
+
+
+def test_clear_group_empties_group_field_but_keeps_devices(registry):
+    _add_sample(registry, name="A", group="3F")
+    _add_sample(registry, name="B", group="3F")
+    count = registry.clear_group("3F")
+    assert count == 2
+    devices = registry.list_devices()
+    assert len(devices) == 2  # 장비는 삭제되지 않음
+    assert all(d.group == "" for d in devices)
+
+
+def test_clear_group_unknown_name_raises_keyerror(registry):
+    with pytest.raises(KeyError):
+        registry.clear_group("no-such-group")
