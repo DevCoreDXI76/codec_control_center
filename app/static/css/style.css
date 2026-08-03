@@ -207,17 +207,6 @@ body {
   color: #fff;
 }
 
-.group-bulk-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-  padding: 0.5rem 0.75rem;
-  background: var(--color-card-bg);
-  border: 1px dashed var(--color-border);
-  border-radius: 8px;
-}
-
 .meetings-widget {
   background: var(--color-card-bg);
   border: 1px solid var(--color-border);
@@ -232,23 +221,52 @@ body {
 }
 
 .meetings-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.meeting-row {
-  display: grid;
-  grid-template-columns: 90px 1fr 2fr auto;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.4rem 0.5rem;
-  border-radius: 6px;
   font-size: 0.86rem;
 }
 
-.meeting-row:nth-child(odd) {
+.meetings-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.meetings-table th,
+.meetings-table td {
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+}
+
+.meetings-table th {
+  cursor: pointer;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  user-select: none;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.meetings-table tbody tr:nth-child(odd) {
   background: var(--color-bg);
+}
+
+.meetings-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.6rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.meetings-page-size,
+.meetings-page-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.page-size-btn.active {
+  background: var(--color-call);
+  border-color: var(--color-call);
+  color: #fff;
 }
 
 .toolbar {
@@ -510,6 +528,31 @@ body {
   color: var(--color-text-muted);
 }
 
+.group-manage-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+}
+
+.group-manage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.group-manage-row:last-child {
+  border-bottom: none;
+}
+
+.group-manage-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
 .log-table-wrap {
   background: var(--color-card-bg);
   border: 1px solid var(--color-border);
@@ -572,6 +615,12 @@ body {
   color: var(--color-text);
   font-weight: 600;
   border-bottom-color: var(--color-text);
+}
+
+.log-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
 }
 
 .app-log-view {

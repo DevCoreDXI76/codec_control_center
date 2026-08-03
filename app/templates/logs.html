@@ -34,8 +34,11 @@
       {% if view == 'system' %}
       <h2>시스템 로그</h2>
       {% if log_lines %}
-      <pre class="app-log-view">{% for line in log_lines %}{{ line }}
-{% endfor %}</pre>
+      <div class="log-actions">
+        <button class="btn" type="button" onclick="copyLogText()">전체 복사</button>
+        <button class="btn" type="button" onclick="downloadLogText('system-log')">txt 다운로드</button>
+      </div>
+      <pre class="app-log-view">{{ copy_text }}</pre>
       {% else %}
       <div class="empty-state">
         <p>아직 기록된 시스템 로그가 없습니다.</p>
@@ -44,6 +47,10 @@
       {% else %}
       <h2>제어 이력</h2>
       {% if entries %}
+      <div class="log-actions">
+        <button class="btn" type="button" onclick="copyLogText()">전체 복사</button>
+        <button class="btn" type="button" onclick="downloadLogText('control-log')">txt 다운로드</button>
+      </div>
       <div class="log-table-wrap">
         <table class="log-table">
           <thead>
@@ -82,5 +89,40 @@
       {% endif %}
     </main>
   </div>
+
+  <script>
+    const LOG_COPY_TEXT = {{ copy_text | tojson }};
+
+    async function copyLogText() {
+      try {
+        await navigator.clipboard.writeText(LOG_COPY_TEXT);
+        showLogToast("복사되었습니다");
+      } catch (e) {
+        showLogToast("복사 실패 — 브라우저 권한을 확인해주세요");
+      }
+    }
+
+    function downloadLogText(prefix) {
+      const now = new Date();
+      const stamp = now.toISOString().slice(0, 16).replace(/[-:T]/g, "");
+      const blob = new Blob([LOG_COPY_TEXT], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${prefix}-${stamp}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function showLogToast(message) {
+      const toast = document.createElement("div");
+      toast.className = "toast";
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 2500);
+    }
+  </script>
 </body>
 </html>

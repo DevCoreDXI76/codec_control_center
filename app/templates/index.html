@@ -47,12 +47,6 @@
         <button class="tab" data-group="{{ g }}" onclick="filterGroup('{{ g }}', this)">{{ g }}</button>
         {% endfor %}
       </div>
-      <div class="group-bulk-actions" id="group-bulk-actions" style="display:none">
-        <span id="group-bulk-label" class="meta"></span>
-        <button class="btn" onclick="bulkMute(true)">그룹 전체 Mute</button>
-        <button class="btn" onclick="bulkMute(false)">그룹 전체 Unmute</button>
-        <button class="btn btn-danger" onclick="bulkReboot()">그룹 전체 재부팅</button>
-      </div>
       {% endif %}
 
       {% if devices %}
@@ -60,6 +54,19 @@
         <h2>오늘의 예정 회의</h2>
         <div id="meetings-list" class="meetings-list">
           <p class="meta">불러오는 중...</p>
+        </div>
+        <div id="meetings-pagination" class="meetings-pagination" style="display:none">
+          <div class="meetings-page-size">
+            <span class="meta">한 화면에</span>
+            <button class="btn page-size-btn" data-size="5" onclick="setMeetingsPageSize(5)">5개</button>
+            <button class="btn page-size-btn" data-size="10" onclick="setMeetingsPageSize(10)">10개</button>
+            <button class="btn page-size-btn" data-size="20" onclick="setMeetingsPageSize(20)">20개</button>
+          </div>
+          <div class="meetings-page-nav">
+            <button class="btn" onclick="changeMeetingsPage(-1)">‹ 이전</button>
+            <span id="meetings-page-label" class="meta"></span>
+            <button class="btn" onclick="changeMeetingsPage(1)">다음 ›</button>
+          </div>
         </div>
       </div>
       {% endif %}

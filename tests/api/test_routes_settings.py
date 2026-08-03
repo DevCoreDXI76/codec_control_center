@@ -122,3 +122,9 @@ def test_settings_page_escapes_saved_tenant_address_in_x_data_attribute(client):
     assert resp.status_code == 200
     assert "teams_tenant_address: &#34;vc.poscodx.com&#34;," in resp.text
     assert 'teams_tenant_address: "vc.poscodx.com",' not in resp.text
+
+
+def test_settings_page_renders_group_management_section(client):
+    resp = client.get("/settings")
+    assert resp.status_code == 200
+    assert "그룹 관리" in resp.text

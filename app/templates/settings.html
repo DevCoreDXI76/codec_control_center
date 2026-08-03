@@ -104,6 +104,83 @@
           BridgeX v{{ app_version }} · coredxi 제작
         </p>
       </div>
+
+      <div
+        class="settings-panel"
+        x-data="{
+          groups: [],
+          error: '',
+          editingName: null,
+          editValue: '',
+          async load() {
+            const resp = await fetch('/api/groups');
+            this.groups = resp.ok ? await resp.json() : [];
+          },
+          startEdit(g) {
+            this.editingName = g.name;
+            this.editValue = g.name;
+            this.error = '';
+          },
+          cancelEdit() {
+            this.editingName = null;
+            this.error = '';
+          },
+          async saveEdit(oldName) {
+            this.error = '';
+            const resp = await fetch(`/api/groups/${encodeURIComponent(oldName)}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ new_name: this.editValue }),
+            });
+            if (!resp.ok) {
+              this.error = resp.status === 409 ? '이미 존재하는 그룹명입니다' : '수정 실패';
+              return;
+            }
+            this.editingName = null;
+            await this.load();
+          },
+          async remove(g) {
+            if (!confirm(`&quot;${g.name}&quot; 그룹 태그를 ${g.device_count}대 장비에서 제거합니다. 장비 자체는 삭제되지 않습니다. 계속할까요?`)) return;
+            const resp = await fetch(`/api/groups/${encodeURIComponent(g.name)}`, { method: 'DELETE' });
+            if (resp.ok) {
+              await this.load();
+            } else {
+              this.error = '삭제 실패';
+            }
+          },
+        }"
+        x-init="load()"
+      >
+        <h2>그룹 관리</h2>
+        <template x-if="groups.length === 0">
+          <p class="meta">등록된 그룹이 없습니다.</p>
+        </template>
+        <ul class="group-manage-list">
+          <template x-for="g in groups" :key="g.name">
+            <li class="group-manage-row">
+              <template x-if="editingName !== g.name">
+                <span x-text="`${g.name} (장비 ${g.device_count}대)`"></span>
+              </template>
+              <template x-if="editingName === g.name">
+                <input type="text" x-model="editValue" />
+              </template>
+              <span class="group-manage-actions">
+                <template x-if="editingName !== g.name">
+                  <button class="btn" type="button" @click="startEdit(g)" title="이름 수정">✎</button>
+                </template>
+                <template x-if="editingName === g.name">
+                  <button class="btn btn-primary" type="button" @click="saveEdit(g.name)" :disabled="!editValue.trim()">저장</button>
+                </template>
+                <template x-if="editingName === g.name">
+                  <button class="btn" type="button" @click="cancelEdit()">취소</button>
+                </template>
+                <button class="btn btn-danger" type="button" @click="remove(g)" title="삭제">🗑</button>
+              </span>
+            </li>
+          </template>
+        </ul>
+        <p class="error-text" x-show="error" x-text="error"></p>
+      </div>
     </main>
   </div>
 </body>

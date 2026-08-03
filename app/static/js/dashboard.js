@@ -105,10 +105,7 @@ function updateStatBar() {
   }
 }
 
-let currentGroup = "__all__";
-
 function filterGroup(group, btn) {
-  currentGroup = group;
   document.querySelectorAll("#group-tabs .tab").forEach((t) => t.classList.remove("active"));
   btn.classList.add("active");
 
@@ -116,39 +113,6 @@ function filterGroup(group, btn) {
     const match = group === "__all__" || card.dataset.group === group;
     card.style.display = match ? "" : "none";
   });
-
-  const bulkBar = document.getElementById("group-bulk-actions");
-  const label = document.getElementById("group-bulk-label");
-  if (!bulkBar || !label) return;
-  if (group === "__all__") {
-    bulkBar.style.display = "none";
-  } else {
-    bulkBar.style.display = "flex";
-    label.textContent = `"${group}" 그룹 일괄 제어:`;
-  }
-}
-
-function visibleDeviceIdsInGroup() {
-  return Array.from(document.querySelectorAll(".device-card"))
-    .filter((card) => currentGroup === "__all__" || card.dataset.group === currentGroup)
-    .map((card) => card.dataset.deviceId);
-}
-
-async function bulkMute(on) {
-  const ids = visibleDeviceIdsInGroup();
-  if (ids.length === 0) return;
-  if (!confirm(`"${currentGroup}" 그룹 ${ids.length}대를 ${on ? "음소거" : "음소거 해제"}하시겠습니까?`)) return;
-  await Promise.all(ids.map((id) => callControl(id, "mute", { on })));
-  await Promise.all(ids.map((id) => refreshStatus(id)));
-  showToast(`${ids.length}대 ${on ? "음소거" : "음소거 해제"} 완료`);
-}
-
-async function bulkReboot() {
-  const ids = visibleDeviceIdsInGroup();
-  if (ids.length === 0) return;
-  if (!confirm(`"${currentGroup}" 그룹 ${ids.length}대를 전부 재부팅하시겠습니까?\n일시적으로 응답하지 않게 됩니다.`)) return;
-  await Promise.all(ids.map((id) => callControl(id, "reboot")));
-  showToast(`${ids.length}대 재부팅 명령 전송됨`);
 }
 
 async function callControl(deviceId, action, body) {
@@ -348,8 +312,173 @@ function formatMeetingTime(isoString) {
   return isoString.replace("T", " ").slice(11, 16);
 }
 
-async function loadUpcomingMeetings() {
+const MEETINGS_SORT_KEY = "bridgex.meetings.sort";
+const MEETINGS_PAGE_SIZE_KEY = "bridgex.meetings.pageSize";
+const MEETINGS_SORT_LABELS = { time: "시간", room: "회의실", subject: "회의명", join: "참가" };
+
+const meetingsState = {
+  rows: [],
+  sortKey: "time",
+  sortDir: "asc",
+  pageSize: 10,
+  page: 1,
+};
+
+function loadMeetingsPrefs() {
+  try {
+    const sort = JSON.parse(localStorage.getItem(MEETINGS_SORT_KEY) || "null");
+    if (sort && sort.key && sort.dir) {
+      meetingsState.sortKey = sort.key;
+      meetingsState.sortDir = sort.dir;
+    }
+    const size = Number(localStorage.getItem(MEETINGS_PAGE_SIZE_KEY));
+    if ([5, 10, 20].includes(size)) meetingsState.pageSize = size;
+  } catch (e) {
+    // localStorage 사용 불가 시 기본값(시간순 오름차순, 10개) 유지
+  }
+}
+
+function saveMeetingsPrefs() {
+  try {
+    localStorage.setItem(
+      MEETINGS_SORT_KEY,
+      JSON.stringify({ key: meetingsState.sortKey, dir: meetingsState.sortDir })
+    );
+    localStorage.setItem(MEETINGS_PAGE_SIZE_KEY, String(meetingsState.pageSize));
+  } catch (e) {
+    // 무시 — 다음 방문 시 기본값으로 시작될 뿐 기능에는 영향 없음
+  }
+}
+
+function meetingsSortValue(row, key) {
+  if (key === "time") return row.entry.start_time;
+  if (key === "room") return row.deviceName;
+  if (key === "subject") return row.entry.subject;
+  if (key === "join") return row.entry.join_uri ? 0 : 1; // 참가 링크 있는 행이 우선
+  return "";
+}
+
+function sortMeetingsRows(rows) {
+  const key = meetingsState.sortKey;
+  const dir = meetingsState.sortDir === "desc" ? -1 : 1;
+  return [...rows].sort((a, b) => {
+    const av = meetingsSortValue(a, key);
+    const bv = meetingsSortValue(b, key);
+    if (av < bv) return -1 * dir;
+    if (av > bv) return 1 * dir;
+    return a.entry.start_time.localeCompare(b.entry.start_time);
+  });
+}
+
+function setMeetingsSort(key) {
+  if (meetingsState.sortKey === key) {
+    meetingsState.sortDir = meetingsState.sortDir === "asc" ? "desc" : "asc";
+  } else {
+    meetingsState.sortKey = key;
+    meetingsState.sortDir = "asc";
+  }
+  meetingsState.page = 1;
+  saveMeetingsPrefs();
+  renderMeetingsTable();
+}
+
+function setMeetingsPageSize(size) {
+  meetingsState.pageSize = size;
+  meetingsState.page = 1;
+  saveMeetingsPrefs();
+  renderMeetingsTable();
+}
+
+function changeMeetingsPage(delta) {
+  const totalPages = Math.max(1, Math.ceil(meetingsState.rows.length / meetingsState.pageSize));
+  meetingsState.page = Math.min(totalPages, Math.max(1, meetingsState.page + delta));
+  renderMeetingsTable();
+}
+
+function renderMeetingsTable() {
   const container = document.getElementById("meetings-list");
+  const pagination = document.getElementById("meetings-pagination");
+  if (!container) return;
+  container.textContent = "";
+
+  if (meetingsState.rows.length === 0) {
+    const p = document.createElement("p");
+    p.className = "meta";
+    p.textContent = "오늘 예정된 회의가 없습니다.";
+    container.appendChild(p);
+    if (pagination) pagination.style.display = "none";
+    return;
+  }
+
+  const sorted = sortMeetingsRows(meetingsState.rows);
+  const totalPages = Math.max(1, Math.ceil(sorted.length / meetingsState.pageSize));
+  meetingsState.page = Math.min(meetingsState.page, totalPages);
+  const start = (meetingsState.page - 1) * meetingsState.pageSize;
+  const pageRows = sorted.slice(start, start + meetingsState.pageSize);
+
+  const table = document.createElement("table");
+  table.className = "meetings-table";
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const key of ["time", "room", "subject", "join"]) {
+    const th = document.createElement("th");
+    const arrow = meetingsState.sortKey === key ? (meetingsState.sortDir === "asc" ? " ▲" : " ▼") : "";
+    th.textContent = MEETINGS_SORT_LABELS[key] + arrow;
+    th.addEventListener("click", () => setMeetingsSort(key));
+    headRow.appendChild(th);
+  }
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  for (const row of pageRows) {
+    const tr = document.createElement("tr");
+
+    const timeTd = document.createElement("td");
+    timeTd.textContent = formatMeetingTime(row.entry.start_time);
+    tr.appendChild(timeTd);
+
+    const roomTd = document.createElement("td");
+    roomTd.textContent = row.deviceName;
+    tr.appendChild(roomTd);
+
+    const subjectTd = document.createElement("td");
+    subjectTd.textContent = row.entry.subject;
+    tr.appendChild(subjectTd);
+
+    const joinTd = document.createElement("td");
+    if (row.entry.join_uri) {
+      const link = document.createElement("a");
+      link.href = "#";
+      link.className = "meeting-link";
+      link.textContent = row.entry.join_uri;
+      link.title = "참여하기";
+      link.addEventListener("click", (ev) => joinMeetingLink(ev, row.deviceId, row.entry));
+      joinTd.appendChild(link);
+    } else {
+      const span = document.createElement("span");
+      span.className = "meta";
+      span.textContent = "참가 정보 없음";
+      joinTd.appendChild(span);
+    }
+    tr.appendChild(joinTd);
+
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  container.appendChild(table);
+
+  if (pagination) {
+    pagination.style.display = "flex";
+    document.querySelectorAll(".page-size-btn").forEach((btn) => {
+      btn.classList.toggle("active", Number(btn.dataset.size) === meetingsState.pageSize);
+    });
+    const label = document.getElementById("meetings-page-label");
+    if (label) label.textContent = `${meetingsState.page} / ${totalPages}페이지 (전체 ${sorted.length}건)`;
+  }
+}
+
+async function loadUpcomingMeetings() {
   const rows = [];
 
   for (const card of document.querySelectorAll(".device-card")) {
@@ -362,51 +491,8 @@ async function loadUpcomingMeetings() {
     renderCardTeamsSection(deviceId, entries);
   }
 
-  if (!container) return;
-  container.textContent = "";
-  if (rows.length === 0) {
-    const p = document.createElement("p");
-    p.className = "meta";
-    p.textContent = "오늘 예정된 회의가 없습니다.";
-    container.appendChild(p);
-    return;
-  }
-
-  rows.sort((a, b) => a.entry.start_time.localeCompare(b.entry.start_time));
-
-  for (const row of rows) {
-    const div = document.createElement("div");
-    div.className = "meeting-row";
-
-    const time = document.createElement("span");
-    time.textContent = formatMeetingTime(row.entry.start_time);
-    div.appendChild(time);
-
-    const name = document.createElement("span");
-    name.textContent = row.deviceName;
-    div.appendChild(name);
-
-    const subject = document.createElement("span");
-    subject.textContent = row.entry.subject;
-    div.appendChild(subject);
-
-    if (row.entry.join_uri) {
-      const link = document.createElement("a");
-      link.href = "#";
-      link.className = "meeting-link";
-      link.textContent = row.entry.join_uri;
-      link.title = "참여하기";
-      link.addEventListener("click", (ev) => joinMeetingLink(ev, row.deviceId, row.entry));
-      div.appendChild(link);
-    } else {
-      const span = document.createElement("span");
-      span.className = "meta";
-      span.textContent = "참가 정보 없음";
-      div.appendChild(span);
-    }
-
-    container.appendChild(div);
-  }
+  meetingsState.rows = rows;
+  renderMeetingsTable();
 }
 
 async function joinMeetingLink(ev, deviceId, entry) {
@@ -542,6 +628,7 @@ async function refreshStatusWithSpin(deviceId, btn) {
 document.addEventListener("DOMContentLoaded", () => {
   connectStatusSocket();
   updateStatBar();
+  loadMeetingsPrefs();
   loadUpcomingMeetings();
   wireDialEnterKey();
   document.querySelectorAll('[data-field="reboot-text"]').forEach((el) => {
