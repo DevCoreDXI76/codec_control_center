@@ -588,6 +588,12 @@ body {
   border-bottom-color: var(--color-text);
 }
 
+.log-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
 .app-log-view {
   background: var(--color-card-bg);
   border: 1px solid var(--color-border);

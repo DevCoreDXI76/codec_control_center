@@ -160,13 +160,26 @@ async def settings_page(request: Request):
 @app.get("/logs")
 async def logs_page(request: Request):
     entries = request.app.state.history.list_recent(limit=200)
-    return templates.TemplateResponse(request, "logs.html", {"view": "control", "entries": entries})
+    copy_text = ""
+    if entries:
+        header = "\t".join(["시각", "장비", "동작", "결과", "상세"])
+        rows = [
+            "\t".join([e.created_at, e.device_name, e.action, "성공" if e.success else "실패", e.detail or ""])
+            for e in entries
+        ]
+        copy_text = "\n".join([header, *rows])
+    return templates.TemplateResponse(
+        request, "logs.html", {"view": "control", "entries": entries, "copy_text": copy_text}
+    )
 
 
 @app.get("/logs/system")
 async def system_log_page(request: Request):
     log_lines = tail_app_log(request.app.state.app_log_path)
-    return templates.TemplateResponse(request, "logs.html", {"view": "system", "log_lines": log_lines})
+    copy_text = "\n".join(log_lines)
+    return templates.TemplateResponse(
+        request, "logs.html", {"view": "system", "log_lines": log_lines, "copy_text": copy_text}
+    )
 
 
 @app.get("/guide")
