@@ -47,12 +47,6 @@
         <button class="tab" data-group="{{ g }}" onclick="filterGroup('{{ g }}', this)">{{ g }}</button>
         {% endfor %}
       </div>
-      <div class="group-bulk-actions" id="group-bulk-actions" style="display:none">
-        <span id="group-bulk-label" class="meta"></span>
-        <button class="btn" onclick="bulkMute(true)">그룹 전체 Mute</button>
-        <button class="btn" onclick="bulkMute(false)">그룹 전체 Unmute</button>
-        <button class="btn btn-danger" onclick="bulkReboot()">그룹 전체 재부팅</button>
-      </div>
       {% endif %}
 
       {% if devices %}

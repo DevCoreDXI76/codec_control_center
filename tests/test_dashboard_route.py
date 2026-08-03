@@ -57,6 +57,8 @@ def test_dashboard_renders_device_card(tmp_path):
     assert '>3F<' in resp.text
     assert 'id="alert-banner"' in resp.text
     assert "display:none" in resp.text  # 오프라인 없으니 배너는 숨김 상태로 렌더
+    assert 'id="group-bulk-actions"' not in resp.text  # 그룹 일괄 제어 버튼 제거됨
+    assert 'onclick="filterGroup(' in resp.text  # 그룹 탭 필터링은 유지
 
 
 def test_dashboard_shows_alert_banner_when_offline(tmp_path):
