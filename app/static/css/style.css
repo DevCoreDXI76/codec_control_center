@@ -510,6 +510,31 @@ body {
   color: var(--color-text-muted);
 }
 
+.group-manage-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+}
+
+.group-manage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.group-manage-row:last-child {
+  border-bottom: none;
+}
+
+.group-manage-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
 .log-table-wrap {
   background: var(--color-card-bg);
   border: 1px solid var(--color-border);
