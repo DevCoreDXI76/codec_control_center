@@ -9,7 +9,7 @@ from collections.abc import Awaitable, Callable
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from app.core.driver_base import DeviceDriver, DriverError
+from app.core.driver_base import DeviceDriver, DriverConflictError, DriverError
 from app.core.history import ControlHistory
 from app.core.polling import PollingScheduler
 from app.core.registry import DeviceRegistry
@@ -39,6 +39,17 @@ def _get_registry(request: Request) -> DeviceRegistry:
     return request.app.state.registry
 
 
+async def reject_if_in_call(driver: DeviceDriver) -> None:
+    """위험한 명령을 실제로 보내기 직전, 그 순간 장비의 실제 통화 상태를 재확인한다.
+    폴링 캐시(최대 120초 지연)를 믿지 않고 매번 fresh하게 물어본다 — 여러 PC가 각자
+    독립적으로 이 장비를 조작할 수 있어, 캐시만 믿으면 다른 PC가 방금 시작한 통화를
+    놓치고 중복 참가/오재부팅으로 이어질 수 있다(2026-08 다중 PC 배포 이후 확인된 리스크,
+    docs/superpowers/specs/2026-08-03-multi-instance-control-race-guard-design.md)."""
+    status = await driver.get_status()
+    if status.in_call:
+        raise DriverConflictError("다른 위치에서 이미 통화 중입니다 — 종료 후 다시 시도해주세요")
+
+
 @router.get("/{device_id}/status")
 async def get_status(device_id: str, request: Request) -> dict:
     scheduler = _get_scheduler(request)
@@ -58,7 +69,8 @@ async def mute(device_id: str, payload: MuteRequest, request: Request) -> dict:
 @router.post("/{device_id}/dial")
 async def dial(device_id: str, payload: DialRequest, request: Request) -> dict:
     return await _run_control(
-        request, device_id, "dial", lambda driver: driver.dial(payload.address), detail=payload.address
+        request, device_id, "dial", lambda driver: driver.dial(payload.address), detail=payload.address,
+        guard=reject_if_in_call,
     )
 
 
@@ -69,7 +81,7 @@ async def hangup(device_id: str, request: Request) -> dict:
 
 @router.post("/{device_id}/reboot")
 async def reboot(device_id: str, request: Request) -> dict:
-    return await _run_control(request, device_id, "reboot", lambda driver: driver.reboot())
+    return await _run_control(request, device_id, "reboot", lambda driver: driver.reboot(), guard=reject_if_in_call)
 
 
 async def _run_control(
@@ -78,16 +90,26 @@ async def _run_control(
     action_name: str,
     action: Callable[[DeviceDriver], Awaitable[bool]],
     detail: str | None = None,
+    guard: Callable[[DeviceDriver], Awaitable[None]] | None = None,
 ) -> dict:
     scheduler = _get_scheduler(request)
     history = _get_history(request)
     device = _get_registry(request).get_device(device_id)
     device_name = device.name if device is not None else device_id
 
+    async def guarded(driver: DeviceDriver) -> bool:
+        if guard is not None:
+            await guard(driver)
+        return await action(driver)
+
     try:
-        ok = await scheduler.run_with_driver(device_id, action)
+        ok = await scheduler.run_with_driver(device_id, guarded)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="device not found") from exc
+    except DriverConflictError as exc:
+        logger.info("device %s %s blocked: %s", device_name, action_name, exc)
+        history.log(device_id=device_id, device_name=device_name, action=action_name, success=False, detail=str(exc))
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except DriverError as exc:
         logger.warning("device %s %s failed: %s", device_name, action_name, exc)
         history.log(device_id=device_id, device_name=device_name, action=action_name, success=False, detail=str(exc))

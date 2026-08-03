@@ -120,6 +120,64 @@ def test_mute_unknown_device_404(client):
     assert resp.status_code == 404
 
 
+class _InCallAwareDriver(DeviceDriver):
+    """get_status()의 in_call을 자유롭게 설정해 가드 로직만 독립적으로 검증하기 위한 가짜 드라이버."""
+
+    def __init__(self, in_call: bool = False) -> None:
+        self.in_call = in_call
+        self.reboot_called = False
+        self.dialed_address: str | None = None
+
+    async def connect(self) -> None:
+        pass
+
+    async def disconnect(self) -> None:
+        pass
+
+    async def get_status(self) -> DeviceStatus:
+        return DeviceStatus(online=True, in_call=self.in_call, muted=False, call_peer=None, last_polled_at="now")
+
+    async def mute(self, on: bool) -> bool:
+        return True
+
+    async def dial(self, address: str) -> bool:
+        self.dialed_address = address
+        return True
+
+    async def hangup(self) -> bool:
+        return True
+
+    async def reboot(self) -> bool:
+        self.reboot_called = True
+        return True
+
+    async def get_calendar_status(self) -> str:
+        return "registered"
+
+    async def get_obtp_entries(self) -> list[CalendarEntry]:
+        return []
+
+    async def join_meeting(self, entry: CalendarEntry) -> bool:
+        return True
+
+
+def _register_device_with_driver(driver: DeviceDriver) -> str:
+    credential_ref = app.state.vault.store(json.dumps({"username": "admin", "password": "pw"}))
+    device = app.state.registry.add_device(
+        name="통화중장비",
+        vendor="cisco",
+        connection_type="ssh",
+        host="127.0.0.1",
+        port=1,
+        group="TEST",
+        credential_ref=credential_ref,
+        is_simulated=True,
+    )
+    app.state.scheduler = PollingScheduler(driver_factory=lambda device_id: driver)
+    asyncio.run(app.state.scheduler.add_device(device.id))
+    return device.id
+
+
 class _BoomDriver(DeviceDriver):
     """DriverError가 아닌 예상 밖 예외(버그)를 흉내내는 테스트 전용 드라이버."""
 
@@ -177,3 +235,29 @@ def test_unexpected_driver_exception_returns_502_and_logs_history(client):
     assert len(entries) == 1
     assert entries[0].success is False
     assert entries[0].action == "mute"
+
+
+def test_reboot_blocked_when_in_call(client):
+    driver = _InCallAwareDriver(in_call=True)
+    device_id = _register_device_with_driver(driver)
+
+    resp = client.post(f"/api/devices/{device_id}/reboot")
+
+    assert resp.status_code == 409
+    assert "이미 통화 중" in resp.json()["detail"]
+    assert driver.reboot_called is False
+    entries = app.state.history.list_recent()
+    assert len(entries) == 1
+    assert entries[0].action == "reboot"
+    assert entries[0].success is False
+
+
+def test_dial_blocked_when_in_call(client):
+    driver = _InCallAwareDriver(in_call=True)
+    device_id = _register_device_with_driver(driver)
+
+    resp = client.post(f"/api/devices/{device_id}/dial", json={"address": "1234@example.com"})
+
+    assert resp.status_code == 409
+    assert "이미 통화 중" in resp.json()["detail"]
+    assert driver.dialed_address is None
