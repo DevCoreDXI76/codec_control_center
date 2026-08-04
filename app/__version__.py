@@ -210,6 +210,34 @@ UTC(Z 접미사)로 내려주는 회의 시간을 그대로 표시하고 있어 
 확인할 수 없는 경우(오프라인/응답없음)도 "통화 중 아님"으로 오인하지 않도록 동일하게
 409로 차단한다(fail-closed). 설계 근거는
 docs/superpowers/specs/2026-08-03-multi-instance-control-race-guard-design.md.
+1.6.3 = 2026-08-04 VDI 재테스트 중 발견된 버그 2건 수정.
+(1) **버그 수정**: Poly 장비의 `callinfo begin`/`callinfo end` 사이가 본문 없이 곧바로
+끝나는 경우(원인 미확정 — 통화 상태 전환 중 타이밍으로 추정)에 대비가 없어, 빈 응답을
+"통화 중"으로 오판한 뒤 `call_lines[0]`을 읽다 처리되지 않은 IndexError로 폴링 루프가
+크래시하던 문제(판교 6층 영상회의실에서 반복 재현, app.log에 "poll raised unexpected
+error"로 기록됨) — 다른 세션 뒤섞임 케이스와 동일하게 DriverCommandError로 올려
+offline+재연결로 안전하게 처리하도록 수정(poly_driver.py).
+(2) **진단 계측 추가**: Cisco 장비의 Teams 회의 목록이 오류 없이 빈 목록만 반환되는
+사례(2026-08-04 VDI 재테스트, 판교 6층 B회의실 — 실제로는 캘린더에 회의가 예약돼 있었음)를
+재현했으나, Cisco 드라이버는 원래 정상 동작 시 아무 로그도 남기지 않는 구조라 원인을
+특정할 수 없었다. `xCommand Bookings List` 응답이 0건으로 파싱될 때 원문을 그대로
+경고 로그로 남기도록 추가(cisco_driver.py) — v1.5.12에서 Poly에 적용한 것과 동일한
+접근. `routes_teams.py`의 캘린더/OBTP 조회 실패(502)도 이제 원인과 함께 로그에 남는다
+(기존엔 조용히 502만 반환). 다음 VDI 재현 시 app.log에서 실제 응답 원문을 확인해
+근본 원인을 특정할 예정 — 이번 릴리즈는 근본 수정이 아니라 진단을 위한 계측이다.
+1.6.4 = 2026-08-04 VDI 재테스트에서 재현된 "한번 응답불가 상태가 되면 Refresh를
+아무리 반복해도 회복되지 않는" 버그의 근본 원인 수정. 판교 6층 영상회의실이 SSH
+인증 실패(app.log: "Authentication (password) failed") 상태에 빠진 뒤 재시도해도
+계속 같은 실패만 반복됨을 로그로 확인 — 원인은 Poly/Cisco 드라이버 둘 다
+`client.connect()`가 실패(인증 실패든 SSHException/OSError든)해도 이미 생성된
+`paramiko.SSHClient`를 한 번도 close()하지 않고 버리는 코드였다. 실패한 시도마다
+장비 쪽에 미종료 SSH 세션이 하나씩 leak되는 구조라, 장비의 동시 세션 한도가 낮으면
+(임베디드 장비 흔한 특성) 재시도(자동 폴링이든 수동 Refresh든) 자체가 leak을 계속
+쌓아 상황을 더 악화시킬 뿐 회복되지 않았다. `_connect_ssh_sync`(poly_driver.py)/
+`_connect_sync`(cisco_driver.py) 모두 연결 실패 시 client.close()를 반드시 호출하도록
+수정(재현 테스트로 leak 확인 후 수정 — TDD). 이 버그가 실제로 최초 인증 실패를
+유발한 원인인지(vs 별개 원인으로 시작해 leak이 회복만 막았는지)는 다음 VDI 재테스트로
+확인 필요.
 """
 
-__version__ = "1.6.2"
+__version__ = "1.6.4"

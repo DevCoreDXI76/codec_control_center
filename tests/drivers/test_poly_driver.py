@@ -1,11 +1,13 @@
 import asyncio
 import socket
 
+import paramiko
 import pytest
 import pytest_asyncio
 
-from app.core.driver_base import CalendarEntry, DriverCommandError
+from app.core.driver_base import CalendarEntry, DriverAuthError, DriverCommandError, DriverConnectionError
 from app.drivers.poly import poly_commands as poly_cmd
+from app.drivers.poly import poly_driver
 from app.drivers.poly.poly_driver import PolyDriver, _normalize_poly_datetime, _parse_uptime
 from app.simulator.poly_sim_server import PolySimServer, PolySSHSimServer
 
@@ -184,6 +186,39 @@ async def test_get_status_extracts_call_peer_from_real_callinfo_format():
 
     assert status.in_call is True
     assert status.call_peer == "1330378709@vc.poscodx.com"
+
+
+async def test_get_status_handles_empty_callinfo_block():
+    """2026-08-04 VDI 재테스트에서 재현(판교 6층 영상회의실, app.log에 "poll raised
+    unexpected error"/IndexError로 반복 기록됨): 장비가 "callinfo begin" 직후 곧바로
+    "callinfo end"를 보내 본문 줄이 하나도 없는 경우가 있었다. 기존 코드는 call_lines가
+    빈 리스트인데도 "system is not in a call"과 다르다는 이유만으로 in_call=True로
+    확정한 뒤 call_lines[0]을 읽어 처리되지 않은 IndexError로 크래시했다 — 다른 세션
+    뒤섞임 케이스(2026-07-31 재발 버그)와 동일하게 DriverCommandError로 올려 상위에서
+    offline으로 안전하게 처리해야 한다."""
+    driver = PolyDriver(host="127.0.0.1", port=1)
+    driver._model = "RealPresence Group 700"
+    lines = iter(
+        [
+            "mute near off",
+            "callinfo begin",
+            "callinfo end",
+        ]
+    )
+
+    async def fake_send(command):
+        return None
+
+    async def fake_read_line_once():
+        return next(lines)
+
+    driver._send = fake_send
+    driver._read_line_once = fake_read_line_once
+
+    status = await driver.get_status()
+
+    assert status.online is False
+    assert status.error is not None
 
 
 async def test_join_meeting_uses_dial_manual_not_dial_phone():
@@ -513,6 +548,62 @@ def test_drain_startup_noise_ssh_sync_consumes_unknown_number_of_lines():
     driver._drain_startup_noise_ssh_sync()
 
     assert len(driver._recent_lines) == 2
+
+
+def _make_fake_ssh_client_cls(raise_exc: Exception):
+    """paramiko.SSHClient을 대신해 connect()에서 지정한 예외를 던지고, close()가
+    실제로 호출됐는지 추적하는 가짜 클래스를 만든다."""
+
+    class _FakeSSHClient:
+        instances: list["_FakeSSHClient"] = []
+
+        def __init__(self) -> None:
+            self.closed = False
+            _FakeSSHClient.instances.append(self)
+
+        def set_missing_host_key_policy(self, policy) -> None:
+            pass
+
+        def connect(self, *args, **kwargs):
+            raise raise_exc
+
+        def close(self) -> None:
+            self.closed = True
+
+    return _FakeSSHClient
+
+
+def test_connect_ssh_closes_client_on_authentication_failure(monkeypatch):
+    """2026-08-04 VDI 재테스트에서 재현: 판교 6층 영상회의실이 한번 SSH 인증 실패
+    상태가 되자, 계속 Refresh해도 매번 "Authentication (password) failed"만 반복되며
+    회복되지 않았다. 원인 확인: connect() 실패 시(인증 실패든 연결 오류든) 이미 생성된
+    paramiko.SSHClient를 한 번도 close()하지 않고 그냥 버려서, 실패한 시도마다 장비 쪽에
+    세션이 leak됐다 — 장비의 동시 SSH 세션 한도를 재시도 자체가 계속 갉아먹어 Refresh를
+    아무리 반복해도 회복될 수 없는 구조였다. connect() 실패 시 client.close()를 반드시
+    호출해야 한다."""
+    fake_cls = _make_fake_ssh_client_cls(paramiko.AuthenticationException("bad password"))
+    monkeypatch.setattr(poly_driver.paramiko, "SSHClient", fake_cls)
+    driver = PolyDriver(host="127.0.0.1", port=1, transport="ssh", username="admin", password="wrong")
+
+    with pytest.raises(DriverAuthError):
+        driver._connect_ssh_sync()
+
+    assert len(fake_cls.instances) == 1
+    assert fake_cls.instances[0].closed is True
+
+
+def test_connect_ssh_closes_client_on_connection_error(monkeypatch):
+    """인증 실패뿐 아니라 연결 자체가 실패하는 경우(SSHException/OSError)도 동일하게
+    leak된다 — 같은 원인, 같은 수정으로 커버되는지 확인."""
+    fake_cls = _make_fake_ssh_client_cls(paramiko.SSHException("no route to host"))
+    monkeypatch.setattr(poly_driver.paramiko, "SSHClient", fake_cls)
+    driver = PolyDriver(host="127.0.0.1", port=1, transport="ssh", username="admin", password="pw")
+
+    with pytest.raises(DriverConnectionError):
+        driver._connect_ssh_sync()
+
+    assert len(fake_cls.instances) == 1
+    assert fake_cls.instances[0].closed is True
 
 
 async def test_call_block_lenient_mode_unchanged_for_other_callers():

@@ -6,6 +6,38 @@
 
 ## [Unreleased]
 
+## [1.6.4] - 2026-08-04
+
+VDI 재테스트에서 재현된 "한번 응답불가 상태가 되면 Refresh를 반복해도 회복되지 않는"
+버그의 근본 원인 수정.
+
+### Fixed
+- Poly/Cisco 드라이버 모두 SSH `client.connect()` 실패(인증 실패/연결 오류) 시 이미
+  생성된 `paramiko.SSHClient`를 close()하지 않고 버려, 실패한 재시도마다 장비 쪽에
+  SSH 세션이 leak되던 문제 — 장비의 동시 세션 한도가 낮으면 재시도할수록 상황이
+  악화돼 회복이 불가능했다(판교 6층 영상회의실에서 재현: "Authentication (password)
+  failed"가 Refresh를 반복해도 계속 반복됨). 연결 실패 시 client.close()를 반드시
+  호출하도록 수정(`poly_driver.py`, `cisco_driver.py`).
+
+## [1.6.3] - 2026-08-04
+
+2026-08-04 VDI 재테스트 중 발견된 버그 2건 수정.
+
+### Fixed
+- Poly 장비의 `callinfo begin`/`callinfo end` 응답 사이에 본문이 하나도 없는 경우
+  (원인 미확정) 통화 중으로 오판한 뒤 처리되지 않은 `IndexError`로 폴링 루프가
+  크래시하던 문제(판교 6층 영상회의실에서 반복 재현) — 다른 세션 뒤섞임 케이스와
+  동일하게 `DriverCommandError`로 처리해 offline+재연결로 안전하게 복구하도록 수정
+  (`poly_driver.py`).
+
+### Added
+- Cisco `xCommand Bookings List` 응답이 0건으로 파싱될 때 원문을 경고 로그로 남기는
+  진단 계측 추가(`cisco_driver.py`) — 판교 6층 B회의실에서 실제로는 회의가 예약돼
+  있는데도 목록이 빈 채로 반환되는 사례를 다음 VDI 재현 시 진단하기 위함. 근본 수정은
+  아직 아님.
+- `routes_teams.py`의 캘린더/OBTP 조회 실패(502) 시 원인을 `app.log`에 남기도록 추가
+  (기존엔 조용히 502만 반환해 로그로 원인 추적이 불가능했음).
+
 ## [1.6.2] - 2026-08-03
 
 다중 PC 인스턴스 동시 제어 시 안전장치 추가.

@@ -11,6 +11,7 @@ get_obtp_entries(회의 상세)는 Bookings List/Get 응답의 정확한 텍스�
 from __future__ import annotations
 
 import dataclasses
+import logging
 import re
 
 from fastapi import APIRouter, HTTPException, Request
@@ -21,6 +22,8 @@ from app.api.routes_control import reject_if_in_call
 from app.core.history import ControlHistory
 from app.core.polling import PollingScheduler
 from app.core.registry import DeviceRegistry
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/devices", tags=["teams"])
 
@@ -54,6 +57,7 @@ async def get_calendar(device_id: str, request: Request) -> dict:
     except NotImplementedError:
         return {"supported": False, "status": None}
     except DriverError as exc:
+        logger.warning("device %s calendar status failed: %s", device_id, exc)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {"supported": True, "status": status}
 
@@ -67,6 +71,7 @@ async def get_obtp(device_id: str, request: Request) -> dict:
     except NotImplementedError:
         return {"supported": False, "entries": []}
     except DriverError as exc:
+        logger.warning("device %s obtp fetch failed: %s", device_id, exc)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {"supported": True, "entries": [dataclasses.asdict(e) for e in entries]}
 

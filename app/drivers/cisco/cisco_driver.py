@@ -9,6 +9,7 @@ cisco_commands.py에서 문서 대조로 확정한 명령만 사용한다.
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 import socket
 from datetime import datetime, timedelta, timezone
@@ -27,7 +28,18 @@ from app.core.driver_base import (
 )
 from . import cisco_commands as cmd
 
+logger = logging.getLogger(__name__)
+
 _END_MARKER = "** end"
+
+
+def _safe_close_ssh_client(client: paramiko.SSHClient) -> None:
+    """close()가 실패해도(이미 끊긴 연결 등) 조용히 무시한다 — 정리 동작은 항상
+    끝까지 끝나야 한다."""
+    try:
+        client.close()
+    except (paramiko.SSHException, OSError, EOFError):
+        pass
 
 
 class CiscoDriver(DeviceDriver):
@@ -66,8 +78,14 @@ class CiscoDriver(DeviceDriver):
                 allow_agent=False,
             )
         except paramiko.AuthenticationException as exc:
+            # client.connect() 실패해도 그때까지 맺어진 TCP/SSH transport는 저절로
+            # 끊기지 않는다 — close()를 안 부르면 실패한 시도마다 장비 쪽에 세션이 하나씩
+            # leak된다(2026-08-04 VDI 재테스트에서 Poly 드라이버의 동일 패턴으로 재현·수정
+            # — 장비의 동시 SSH 세션 한도가 낮으면 재시도해도 회복되지 않는 상태가 된다).
+            _safe_close_ssh_client(client)
             raise DriverAuthError(str(exc)) from exc
         except (paramiko.SSHException, OSError) as exc:
+            _safe_close_ssh_client(client)
             raise DriverConnectionError(str(exc)) from exc
 
         channel = client.invoke_shell()
@@ -98,10 +116,7 @@ class CiscoDriver(DeviceDriver):
             except (paramiko.SSHException, OSError, EOFError):
                 pass
         if self._client is not None:
-            try:
-                self._client.close()
-            except (paramiko.SSHException, OSError, EOFError):
-                pass
+            _safe_close_ssh_client(self._client)
         self._channel = None
         self._client = None
 
@@ -260,7 +275,14 @@ class CiscoDriver(DeviceDriver):
         # 따로 호출할 필요가 없다 — 기존 파서는 이 프리픽스를 고려하지 않아 모든 줄을
         # 건너뛰는 바람에 일정이 하나도 안 잡히던 버그였다.
         list_lines = self._call_block_sync(cmd.bookings_list())
-        return _parse_bookings_list(list_lines)
+        entries = _parse_bookings_list(list_lines)
+        if not entries:
+            # 실제 예약된 회의가 있는데도 빈 목록이 나오는 사례(2026-08 VDI 재테스트)를
+            # 진단하기 위한 계측 — 장비 모델/펌웨어별로 응답 필드 레이아웃이 07-31
+            # 확인분과 다를 가능성을 원문으로 직접 확인한다(v1.5.12에서 Poly에 적용한
+            # 것과 동일한 접근: 추측 대신 원문을 남겨 다음 재현 시 바로 진단).
+            logger.warning("cisco bookings list parsed to 0 entries; raw response: %r", list_lines)
+        return entries
 
     async def join_meeting(self, entry: CalendarEntry) -> bool:
         if not entry.join_uri:

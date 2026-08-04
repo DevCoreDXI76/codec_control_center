@@ -1,8 +1,16 @@
+import paramiko
 import pytest
 import pytest_asyncio
 
-from app.core.driver_base import CalendarEntry, DriverCommandError, DriverTimeoutError
+from app.core.driver_base import (
+    CalendarEntry,
+    DriverAuthError,
+    DriverCommandError,
+    DriverConnectionError,
+    DriverTimeoutError,
+)
 from app.drivers.cisco import cisco_commands as cisco_cmd
+from app.drivers.cisco import cisco_driver
 from app.drivers.cisco.cisco_driver import CiscoDriver, _check_result_ok, _cisco_utc_to_kst_naive, _parse_bookings_list
 from app.simulator.cisco_sim_server import CiscoSimServer
 
@@ -324,3 +332,55 @@ def test_cisco_utc_to_kst_naive_returns_raw_on_unparseable_input():
 
 def test_parse_bookings_list_empty_when_no_bookings():
     assert _parse_bookings_list(["OK", "", "*r BookingsListResult (status=OK):", "*r BookingsListResult ResultInfo TotalRows: 0"]) == []
+
+
+def _make_fake_ssh_client_cls(raise_exc: Exception):
+    """paramiko.SSHClient을 대신해 connect()에서 지정한 예외를 던지고, close()가
+    실제로 호출됐는지 추적하는 가짜 클래스를 만든다."""
+
+    class _FakeSSHClient:
+        instances: list["_FakeSSHClient"] = []
+
+        def __init__(self) -> None:
+            self.closed = False
+            _FakeSSHClient.instances.append(self)
+
+        def set_missing_host_key_policy(self, policy) -> None:
+            pass
+
+        def connect(self, *args, **kwargs):
+            raise raise_exc
+
+        def close(self) -> None:
+            self.closed = True
+
+    return _FakeSSHClient
+
+
+def test_connect_closes_client_on_authentication_failure(monkeypatch):
+    """poly_driver와 동일한 원인의 leak — connect() 실패 시 이미 생성된
+    paramiko.SSHClient를 close()하지 않으면 실패한 시도마다 장비 쪽에 세션이 leak되고,
+    장비의 동시 SSH 세션 한도가 낮으면 재시도(자동 폴링/수동 Refresh)를 아무리 반복해도
+    회복되지 않는 상태가 될 수 있다(2026-08-04 VDI 재테스트에서 Poly 장비로 재현된 것과
+    같은 코드 패턴)."""
+    fake_cls = _make_fake_ssh_client_cls(paramiko.AuthenticationException("bad password"))
+    monkeypatch.setattr(cisco_driver.paramiko, "SSHClient", fake_cls)
+    driver = CiscoDriver(host="127.0.0.1", port=1, username="admin", password="wrong")
+
+    with pytest.raises(DriverAuthError):
+        driver._connect_sync()
+
+    assert len(fake_cls.instances) == 1
+    assert fake_cls.instances[0].closed is True
+
+
+def test_connect_closes_client_on_connection_error(monkeypatch):
+    fake_cls = _make_fake_ssh_client_cls(paramiko.SSHException("no route to host"))
+    monkeypatch.setattr(cisco_driver.paramiko, "SSHClient", fake_cls)
+    driver = CiscoDriver(host="127.0.0.1", port=1, username="admin", password="pw")
+
+    with pytest.raises(DriverConnectionError):
+        driver._connect_sync()
+
+    assert len(fake_cls.instances) == 1
+    assert fake_cls.instances[0].closed is True

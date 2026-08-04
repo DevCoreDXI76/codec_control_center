@@ -35,6 +35,15 @@ from app.core.driver_base import (
 from . import poly_commands as cmd
 
 
+def _safe_close_ssh_client(client: paramiko.SSHClient) -> None:
+    """close()가 실패해도(이미 끊긴 연결 등) 조용히 무시한다 — 정리 동작은 항상
+    끝까지 끝나야 한다."""
+    try:
+        client.close()
+    except (paramiko.SSHException, OSError, EOFError):
+        pass
+
+
 def _allow_legacy_ssh_rsa_hostkey() -> None:
     """paramiko 5.x는 SHA-1 기반 구형 호스트키(ssh-rsa)를 기본 협상 목록에서 제외한다
     (paramiko/transport.py Transport._key_info, _preferred_keys — "do not want ssh-rsa"
@@ -204,8 +213,16 @@ class PolyDriver(DeviceDriver):
                 allow_agent=False,
             )
         except paramiko.AuthenticationException as exc:
+            # client.connect()가 실패해도 그때까지 맺어진 TCP/SSH transport는 저절로
+            # 끊기지 않는다 — close()를 안 부르면 실패한 시도마다 장비 쪽에 세션이 하나씩
+            # leak된다. 장비의 동시 SSH 세션 한도가 낮으면(임베디드 장비 흔한 특성) 이
+            # leak이 쌓여 이후 재시도(자동 폴링/수동 Refresh 모두)가 계속 인증 실패로
+            # 보이면서 아무리 다시 시도해도 회복되지 않는 상태가 된다(2026-08-04 VDI
+            # 재테스트에서 판교 6층 영상회의실이 재현 — Refresh를 반복해도 변화 없었음).
+            _safe_close_ssh_client(client)
             raise DriverAuthError(str(exc)) from exc
         except (paramiko.SSHException, OSError) as exc:
+            _safe_close_ssh_client(client)
             raise DriverConnectionError(str(exc)) from exc
 
         channel = client.invoke_shell()
@@ -230,10 +247,7 @@ class PolyDriver(DeviceDriver):
             except (paramiko.SSHException, OSError, EOFError):
                 pass
         if self._ssh_client is not None:
-            try:
-                self._ssh_client.close()
-            except (paramiko.SSHException, OSError, EOFError):
-                pass
+            _safe_close_ssh_client(self._ssh_client)
         self._ssh_channel = None
         self._ssh_client = None
 
@@ -415,6 +429,21 @@ class PolyDriver(DeviceDriver):
             in_call = call_lines != ["system is not in a call"]
             call_peer = None
             if in_call:
+                if not call_lines:
+                    # 2026-08-04 VDI 재테스트에서 재현: "callinfo begin" 직후 본문 없이
+                    # 곧바로 "callinfo end"가 오는 경우가 있었다 — 원인 미확정(통화
+                    # 상태 전환 중 타이밍으로 추정). 빈 리스트는 "system is not in a
+                    # call"과도 다르므로 위 in_call 판정이 True가 되지만 실제 통화
+                    # 상세가 없어 call_lines[0]을 읽을 수 없다. 다른 세션 뒤섞임
+                    # 케이스(_call_block의 desync 분기)와 동일하게 확정하지 않고
+                    # DriverCommandError로 올려 상위에서 offline+재연결로 안전하게
+                    # 처리한다(그 전에는 처리되지 않은 IndexError로 폴링 루프가
+                    # 크래시했음).
+                    logger.warning(
+                        "poly callinfo begin/end block was empty, recent trace: %s",
+                        list(self._recent_lines),
+                    )
+                    raise DriverCommandError("callinfo response block was empty")
                 # 실장비 원문으로 확인된 형식: "callinfo:<id>::<주소>:384:connected:...".
                 # call.id 다음 필드(index 2)가 비어 있고 주소는 index 3에 온다(2026-07-31
                 # VDI 2차 재테스트) — 시뮬레이터는 이 빈 필드 없이 index 2에 주소를 바로
