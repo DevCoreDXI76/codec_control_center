@@ -24,6 +24,10 @@
       <a class="active" href="/settings">설정</a>
       <a href="/logs">로그</a>
       <a class="sidebar-guide-link" href="/guide">가이드</a>
+      <p class="sidebar-version">
+        <img class="footer-mark" src="/static/img/coredxi-mark.png" alt="" />
+        BridgeX v{{ app_version }} · coredxi 제작
+      </p>
     </nav>
 
     <main class="main">
@@ -99,10 +103,6 @@
             <button class="btn btn-primary" type="submit" :disabled="saving">저장</button>
           </div>
         </form>
-        <p class="meta version-footer">
-          <img class="footer-mark" src="/static/img/coredxi-mark.png" alt="" />
-          BridgeX v{{ app_version }} · coredxi 제작
-        </p>
       </div>
 
       <div

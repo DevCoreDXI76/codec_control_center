@@ -84,6 +84,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="BridgeX", lifespan=lifespan)
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates.env.globals["app_version"] = __version__  # 사이드바 버전 표기(모든 화면 공통)에 사용
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 app.state.registry = DeviceRegistry(DATA_DIR / "devices.enc.json")
@@ -153,7 +154,7 @@ async def settings_page(request: Request):
     return templates.TemplateResponse(
         request,
         "settings.html",
-        {"settings": settings, "data_dir": str(DATA_DIR), "app_version": __version__},
+        {"settings": settings, "data_dir": str(DATA_DIR)},
     )
 
 

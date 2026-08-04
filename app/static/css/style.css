@@ -146,6 +146,16 @@ body {
   padding-top: 0.75rem;
 }
 
+.sidebar-version {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.4rem 0 0;
+  padding: 0 1.25rem;
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
 .sidebar a.active,
 .sidebar a:hover {
   background: var(--color-bg);
@@ -503,17 +513,6 @@ body {
 
 .settings-panel h2 {
   margin-top: 0;
-}
-
-.version-footer {
-  margin-top: 1.25rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--color-border);
-  font-size: 0.78rem;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--color-text-muted);
 }
 
 .footer-mark {
